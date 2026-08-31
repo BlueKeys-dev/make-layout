@@ -420,18 +420,6 @@ renderer.render(layout)`}
 
 export const INITIAL_ELEMENTS: CanvasElement[] = [
   { 
-    id: '1', 
-    type: 'image', 
-    x: 40, 
-    y: 40, 
-    w: 515, 
-    h: 200, 
-    color: 'bg-emerald-500/20', 
-    zIndex: 1, 
-    name: 'Hero Image',
-    src: 'https://images.unsplash.com/photo-1620641788421-7f1c338e420c?q=80&w=2070&auto=format&fit=crop'
-  },
-  { 
     id: '2', 
     type: 'text', 
     x: 40, 
@@ -469,17 +457,5 @@ export const INITIAL_ELEMENTS: CanvasElement[] = [
     name: 'Body Copy',
     content: 'Generate stunning designs with AI-powered precision. Our engine adapts content to any viewport while maintaining strict visual hierarchy and typographic rhythm.',
     textStyle: { fontSize: 14, lineHeight: 1.5, color: '#94a3b8', textAlign: 'left' }
-  },
-  {
-    id: 'feat-img-1',
-    type: 'image',
-    x: 300,
-    y: 360,
-    w: 255,
-    h: 150,
-    color: 'bg-indigo-500/20',
-    zIndex: 2,
-    name: 'Feature Image',
-    src: 'https://images.unsplash.com/photo-1611162617474-5b21e879e113?q=80&w=1974&auto=format&fit=crop'
   }
 ];
