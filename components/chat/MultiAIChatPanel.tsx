@@ -128,16 +128,6 @@ export const MultiAIChatPanel: React.FC<MultiAIChatPanelProps> = ({
           </div>
           
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIsPanelHidden(true)}
-              className="p-1.5 text-white/30 hover:text-white/60 transition-colors"
-              title="Hide chat"
-              aria-label="Hide chat"
-            >
-              <ChevronsDown size={14} />
-            </button>
-
             {/* Refresh Chat Button */}
             <button
               type="button"
@@ -156,6 +146,16 @@ export const MultiAIChatPanel: React.FC<MultiAIChatPanelProps> = ({
             >
               <Wand2 size={14} fill="currentColor" />
               <span>Create</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsPanelHidden(true)}
+              className="p-1.5 rounded-lg text-white/90 hover:text-white hover:bg-white/15 transition-colors"
+              title="Hide chat"
+              aria-label="Hide chat"
+            >
+              <ChevronsDown size={16} />
             </button>
           </div>
         </div>
