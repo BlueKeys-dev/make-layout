@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=2.0"
+    />
+    <title>AI Layout Engine Architect</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Public+Sans:wght@300;400;500;600&family=Roboto:wght@300;400;500;700&family=Montserrat:wght@300;400;500;700&family=Poppins:wght@300;400;500;700&family=Lato:wght@300;400;700&family=Oswald:wght@400;500;700&family=Playfair+Display:wght@400;700&family=Merriweather:wght@300;400;700&family=Nunito:wght@300;400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/icon?family=Material+Icons+Round"
+      rel="stylesheet"
+    />
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Inter", "sans-serif"],
+              display: ["Public Sans", "sans-serif"],
+              mono: ["JetBrains Mono", "monospace"],
+            },
+            colors: {
+              "primary": "#ec5b13",
+              "primary-orange": "#ec5b13",
+              "background-light": "#F3F4F6",
+              "background-dark": "#0f0f13", // Deep dark canvas background
+              "surface-light": "#FFFFFF",
+              "surface-dark": "#18181b", // Panel background
+              "border-light": "#E5E7EB",
+              "border-dark": "#27272a",
+              "text-primary-light": "#111827",
+              "text-primary-dark": "#e2e8f0",
+              "text-secondary-light": "#4b5563",
+              "text-secondary-dark": "#94a3b8",
+            },
+            boxShadow: {
+              floating:
+                "0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)",
+              "floating-dark":
+                "0 8px 20px -4px rgba(0, 0, 0, 0.8), 0 4px 10px -2px rgba(0, 0, 0, 0.6)",
+              "glow-primary": "0 0 15px 2px rgba(236, 91, 19, 0.3)",
+              "inner-pressed-dark":
+                "inset 0 2px 4px 0 rgba(0, 0, 0, 0.8), inset 0 0 0 1px rgba(255, 255, 255, 0.03)",
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      body {
+        background-color: #0f0f13;
+        color: #e2e8f0;
+      }
+      .canvas-grid {
+        background-size: 20px 20px;
+        background-image: linear-gradient(
+            to right,
+            rgba(0, 0, 0, 0.05) 1px,
+            transparent 1px
+          ),
+          linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+      }
+      .dark .canvas-grid {
+        background-image: linear-gradient(
+            to right,
+            rgba(255, 255, 255, 0.03) 1px,
+            transparent 1px
+          ),
+          linear-gradient(
+            to bottom,
+            rgba(255, 255, 255, 0.03) 1px,
+            transparent 1px
+          );
+      }
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar {
+        width: 6px;
+        height: 6px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #3f3f46;
+        border-radius: 4px;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #52525b;
+      }
+
+      /* GeoGebra Theming - CSS Variables */
+      .geogebra-container {
+        --ggb-primary-color: #515f4e;
+        --ggb-secondary-color: #879d89;
+        --ggb-background-color: #e9e9e4;
+        --ggb-text-color: #11110e;
+        --ggb-border-color: #bebdaf;
+        --ggb-border-radius: 8px;
+      }
+      .dark .geogebra-container {
+        --ggb-background-color: #11110e;
+        --ggb-text-color: #e9e9e4;
+        --ggb-border-color: rgba(190, 189, 175, 0.1);
+      }
+      /* Apply GeoGebra styling */
+      .geogebra-container article,
+      .geogebra-container .GeoGebraFrame {
+        background: var(--ggb-background-color) !important;
+        border-radius: var(--ggb-border-radius) !important;
+      }
+    </style>
+
+    <!-- GeoGebra Service Worker for Caching (only works on HTTPS) -->
+    <script>
+      var serviceWorkerPath = '/sworker-locked.js';
+      var appletLocation = '/';
+
+      function isServiceWorkerSupported() {
+        return 'serviceWorker' in navigator && location.protocol === 'https:';
+      }
+
+      function installGeoGebraServiceWorker() {
+        if (navigator.serviceWorker.controller) {
+          console.log('[GeoGebra] Service worker already active.');
+        } else {
+          navigator.serviceWorker.register(serviceWorkerPath, { scope: appletLocation })
+            .then(function() { console.log('[GeoGebra] Service worker registered.'); })
+            .catch(function(err) { console.warn('[GeoGebra] SW registration failed:', err); });
+        }
+      }
+
+      if (isServiceWorkerSupported()) {
+        window.addEventListener('load', installGeoGebraServiceWorker);
+      }
+    </script>
+    <script type="importmap">
+      {
+        "imports": {
+          "react/": "https://esm.sh/react@^19.2.3/",
+          "react": "https://esm.sh/react@^19.2.3",
+          "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+          "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+          "@google/genai": "https://esm.sh/@google/genai@^1.34.0"
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="/index.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
