@@ -1174,13 +1174,21 @@ export const DesignEditor = () => {
                                 color: '#ffffff',
                                 zIndex: 0, // Background layer
                                 locked: true,
-                                boardConfig: { backgroundColor: '#ffffff', borderRadius: canvasConfig.borderRadius }
+                                boardConfig: {
+                                    backgroundColor: '#ffffff',
+                                    borderRadius: canvasConfig.borderRadius,
+                                    showGrid: canvasConfig.showGrid,
+                                    gridRows: canvasConfig.gridRows,
+                                    gridCols: canvasConfig.gridCols,
+                                    showGuides: canvasConfig.showGuides,
+                                }
                             };
 
                             setElements(prev => [...prev, newBoard]);
 
                             // Move view to new board center (properly centered in viewport)
                             setViewPos(getCenteredViewPos(newBoardX + newBoard.w / 2, newBoard.h / 2));
+                            setSelectedIds([newBoard.id]);
                             setSelectedBoardId(newBoard.id);
                             setActiveTool('select');
                         }}

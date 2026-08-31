@@ -71,6 +71,9 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseDown={onMouseDown}
+      onMouseLeave={(e) => {
+        if (e.buttons) onMouseUp(e);
+      }}
       style={{
         backgroundImage: 'radial-gradient(circle, #94a3b8aa 1.5px, transparent 1.5px)',
         backgroundSize: '24px 24px',
@@ -190,6 +193,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
             onUpdateElement={(id, ups) => {
               setElements(prev => prev.map(e => e.id === id ? { ...e, ...ups } : e));
             }}
+            canvasConfig={canvasConfig}
           />
         ))}
 

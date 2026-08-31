@@ -138,7 +138,13 @@ export const createElementFactory = (
         h: 500,
         color: 'bg-slate-100/50',
         name: 'Container',
-        locked: true
+        locked: true,
+        boardConfig: {
+          showGrid: true,
+          gridRows: 12,
+          gridCols: 12,
+          showGuides: true,
+        }
       };
 
     default:

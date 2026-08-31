@@ -57,12 +57,12 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
       <div className="relative">
         <button
           type="button"
-          className="bg-white dark:bg-surface-dark hover:bg-gray-100 dark:hover:bg-gray-800 text-text-primary-light dark:text-text-primary-dark border border-border-light dark:border-border-dark p-2 rounded-lg shadow-lg transition-all flex items-center justify-center"
+          className="w-10 h-10 rounded-full bg-white dark:bg-surface-dark hover:bg-gray-100 dark:hover:bg-gray-800 text-text-primary-light dark:text-text-primary-dark border border-border-light dark:border-border-dark shadow-lg transition-all flex items-center justify-center"
           onClick={() => setShowExportMenu(!showExportMenu)}
           title="Export"
           aria-label="Export"
         >
-          <Download size={16} />
+          <Download size={18} />
         </button>
 
         {showExportMenu && (
@@ -111,12 +111,12 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
       <div className="relative">
         <button
           type="button"
-          className="bg-primary hover:bg-primary-orange/80 text-white p-2 rounded-lg shadow-lg transition-all flex items-center justify-center"
+          className="w-10 h-10 rounded-full bg-primary hover:bg-primary-orange/80 text-white shadow-lg transition-all flex items-center justify-center"
           onClick={() => setShowImportMenu(!showImportMenu)}
           title="Import"
           aria-label="Import"
         >
-          <Upload size={16} />
+          <Upload size={18} />
         </button>
 
         {showImportMenu && (
