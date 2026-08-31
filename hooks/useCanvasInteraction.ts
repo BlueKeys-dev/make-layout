@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { CanvasElement } from '../types';
+import { isElementLocked } from '../utils/elementRegistry';
 
 type InteractionMode = 'idle' | 'dragging' | 'resizing';
 type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se';
@@ -54,10 +55,16 @@ export const useCanvasInteraction = (
     }
     
     setSelectedIds(nextSelectedIds);
-    setMode(resizeHandle ? 'resizing' : 'dragging');
-    
+
+    const clicked = elements.find(el => el.id === id);
+    if (clicked && isElementLocked(clicked)) {
+      setMode('idle');
+      dragState.current = null;
+      return;
+    }
+
     const originalElements = elements
-      .filter(el => nextSelectedIds.includes(el.id))
+      .filter(el => nextSelectedIds.includes(el.id) && !isElementLocked(el))
       .map(el => ({
         id: el.id,
         x: el.x,
@@ -67,6 +74,13 @@ export const useCanvasInteraction = (
         type: el.type
       }));
 
+    if (originalElements.length === 0) {
+      setMode('idle');
+      dragState.current = null;
+      return;
+    }
+
+    setMode(resizeHandle ? 'resizing' : 'dragging');
     dragState.current = {
       startX: e.clientX,
       startY: e.clientY,

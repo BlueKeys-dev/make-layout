@@ -69,8 +69,8 @@ export const createElementFactory = (
         w: 200,
         h: 150,
         color: 'transparent',
-        name: 'page',
-        path: "M10 80 Q 50 10 90 80 T 180 80",
+        name: 'Drawing',
+        path: '',
         strokeColor: "#ec5b13",
         strokeWidth: 4
       };
@@ -137,7 +137,8 @@ export const createElementFactory = (
         w: 500,
         h: 500,
         color: 'bg-slate-100/50',
-        name: 'Container'
+        name: 'Container',
+        locked: true
       };
 
     default:
@@ -149,3 +150,6 @@ export const getElementDefaultSize = (type: ElementType) => {
   const temp = createElementFactory(type, 0, 0, 0);
   return { w: temp.w, h: temp.h };
 };
+
+export const isElementLocked = (el: CanvasElement) =>
+  el.type === 'container' ? el.locked !== false : !!el.locked;

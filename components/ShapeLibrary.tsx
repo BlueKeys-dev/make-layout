@@ -36,6 +36,30 @@ export interface ShapeDefinition {
 const norm = (points: number[][], w: number, h: number) => 
   points.map(([x, y]) => ({ x: x * w, y: y * h }));
 
+export const fitPointsToBox = (
+  points: { x: number; y: number }[],
+  w: number,
+  h: number
+): { x: number; y: number }[] => {
+  if (points.length === 0) return points;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of points) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  const spanX = maxX - minX || 1;
+  const spanY = maxY - minY || 1;
+  return points.map((p) => ({
+    x: ((p.x - minX) / spanX) * w,
+    y: ((p.y - minY) / spanY) * h,
+  }));
+};
+
 export const SHAPES: Record<ShapeType, ShapeDefinition> = {
   // Basics
   rectangle: {

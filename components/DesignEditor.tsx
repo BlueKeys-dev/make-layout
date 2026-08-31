@@ -30,20 +30,33 @@ import { ShapeType } from '../types';
 type Bounds = { x: number; y: number; w: number; h: number };
 
 const getElementBounds = (el: CanvasElement): Bounds => {
-    if (el.type === 'path' && Array.isArray(el.points) && el.points.length > 0 && Array.isArray(el.points[0])) {
-        let minX = Infinity;
-        let minY = Infinity;
-        let maxX = -Infinity;
-        let maxY = -Infinity;
-        for (const pt of el.points as number[][]) {
-            minX = Math.min(minX, pt[0]);
-            minY = Math.min(minY, pt[1]);
-            maxX = Math.max(maxX, pt[0]);
-            maxY = Math.max(maxY, pt[1]);
-        }
-        return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
-    }
     return { x: el.x, y: el.y, w: el.w, h: el.h };
+};
+
+const fitPathStroke = (worldPoints: number[][], strokeWidth = 4) => {
+    const pad = Math.max(8, strokeWidth * 2);
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const pt of worldPoints) {
+        minX = Math.min(minX, pt[0]);
+        minY = Math.min(minY, pt[1]);
+        maxX = Math.max(maxX, pt[0]);
+        maxY = Math.max(maxY, pt[1]);
+    }
+    if (!Number.isFinite(minX)) {
+        return { x: 0, y: 0, w: pad * 2, h: pad * 2, points: [] as number[][] };
+    }
+    const x = minX - pad;
+    const y = minY - pad;
+    return {
+        x,
+        y,
+        w: Math.max(pad * 2, maxX - minX + pad * 2),
+        h: Math.max(pad * 2, maxY - minY + pad * 2),
+        points: worldPoints.map(([px, py, pr]) => [px - x, py - y, pr ?? 0.5]),
+    };
 };
 
 const rectsOverlap = (a: Bounds, b: Bounds) =>
@@ -137,6 +150,7 @@ export const DesignEditor = () => {
     const abortControllerRef = useRef<AbortController | null>(null);
     const activeDrawingIdRef = useRef<string | null>(null); // Track actively drawing path element
     const pointsBufferRef = useRef<number[][]>([]); // Buffer for high-frequency point collection
+    const pathWorldPointsRef = useRef<number[][]>([]);
     const rafIdRef = useRef<number | null>(null); // RequestAnimationFrame ID
     const marqueeRef = useRef<{ start: { x: number; y: number }; additive: boolean; baseIds: string[] } | null>(null);
     const elementsRef = useRef<CanvasElement[]>([]);
@@ -384,14 +398,14 @@ export const DesignEditor = () => {
                         rafIdRef.current = null;
 
                         if (activeId && bufferedPoints.length > 0) {
+                            pathWorldPointsRef.current = [...pathWorldPointsRef.current, ...bufferedPoints];
+                            const fitted = fitPathStroke(pathWorldPointsRef.current, 4);
                             setElements(prev => prev.map(el => {
                                 if (el.id === activeId && el.type === 'path') {
-                                    // Path elements use number[][] format
-                                    const currentPoints = (el.points || []) as number[][];
-                                    return { ...el, points: [...currentPoints, ...bufferedPoints] } as CanvasElement;
+                                    return { ...el, ...fitted };
                                 }
                                 return el;
-                            }));
+                            }), false);
                         }
                     });
                 }
@@ -464,18 +478,22 @@ export const DesignEditor = () => {
 
             // Special Handling for Pencil (Freehand)
             if (pendingElementType === 'path') {
-                // Immediate creation
-                const newElement = createElementFactory('path', 0, 0, elements.length + 1);
-                newElement.x = 0;
-                newElement.y = 0;
-                newElement.w = logicalWidth;
-                newElement.h = logicalHeight;
-                newElement.points = [[coords.x, coords.y, (e.nativeEvent as PointerEvent).pressure || 0.5]];
+                const pressure = (e.nativeEvent as PointerEvent).pressure || 0.5;
+                const first = [coords.x, coords.y, pressure];
+                pathWorldPointsRef.current = [first];
+                const fitted = fitPathStroke([first], 4);
+                const newElement = createElementFactory('path', fitted.x, fitted.y, elements.length + 1);
+                newElement.x = fitted.x;
+                newElement.y = fitted.y;
+                newElement.w = fitted.w;
+                newElement.h = fitted.h;
+                newElement.points = fitted.points;
+                newElement.color = 'transparent';
 
-                setElements(prev => [...prev, newElement]);
+                setElements(prev => [...prev, newElement], false);
                 setSelectedIds([newElement.id]);
-                activeDrawingIdRef.current = newElement.id; // Track for optimized updates
-                pointsBufferRef.current = []; // Clear buffer
+                activeDrawingIdRef.current = newElement.id;
+                pointsBufferRef.current = [];
             }
 
         } else if (activeTool === 'polygon_draw') {
@@ -532,10 +550,28 @@ export const DesignEditor = () => {
         if (activeTool === 'placement' && pendingElementType && placementStart) {
             // For Path, we are done with this stroke.
             if (pendingElementType === 'path') {
+                if (pointsBufferRef.current.length > 0) {
+                    pathWorldPointsRef.current = [...pathWorldPointsRef.current, ...pointsBufferRef.current];
+                    pointsBufferRef.current = [];
+                }
+                const activeId = activeDrawingIdRef.current;
+                if (activeId && pathWorldPointsRef.current.length > 0) {
+                    const fitted = fitPathStroke(pathWorldPointsRef.current, 4);
+                    setElements(prev => prev.map(el => {
+                        if (el.id === activeId && el.type === 'path') {
+                            return { ...el, ...fitted };
+                        }
+                        return el;
+                    }), true);
+                }
                 setPlacementStart(null);
                 setGhostPosition(null);
-                activeDrawingIdRef.current = null; // Finished stroke
-                // Stay in placement mode for continuous drawing
+                activeDrawingIdRef.current = null;
+                pathWorldPointsRef.current = [];
+                if (rafIdRef.current) {
+                    cancelAnimationFrame(rafIdRef.current);
+                    rafIdRef.current = null;
+                }
                 return;
             }
 
@@ -1137,6 +1173,7 @@ export const DesignEditor = () => {
                                 h: getEffectiveDimensions(canvasConfig).height,
                                 color: '#ffffff',
                                 zIndex: 0, // Background layer
+                                locked: true,
                                 boardConfig: { backgroundColor: '#ffffff', borderRadius: canvasConfig.borderRadius }
                             };
 
@@ -1262,6 +1299,7 @@ export const DesignEditor = () => {
                                 zIndex: 0,
                                 name: `PDF Page ${pageNum}`,
                                 content: 'board',
+                                locked: true,
                                 boardConfig: {
                                     backgroundColor: '#ffffff',
                                     gridCols: 12,
@@ -1339,6 +1377,7 @@ export const DesignEditor = () => {
                                     zIndex: 0,
                                     name: `PDF Page ${page.pageNumber}`,
                                     content: 'board',
+                                    locked: true,
                                     boardConfig: {
                                         backgroundColor: '#ffffff',
                                         gridCols: 12,

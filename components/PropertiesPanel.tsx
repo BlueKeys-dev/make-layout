@@ -18,7 +18,10 @@ import {
   EyeOff,
   Palette,
   Table,
-  Square
+  Square,
+  Magnet,
+  Lock,
+  Unlock
 } from 'lucide-react';
 
 const AVAILABLE_FONTS = [
@@ -36,6 +39,8 @@ const AVAILABLE_FONTS = [
 ];
 import { NodeEditor } from './NodeEditor';
 import { CanvasElement } from '../types';
+import { fitPointsToBox } from './ShapeLibrary';
+import { isElementLocked } from '../utils/elementRegistry';
 
 interface PropertiesPanelProps {
   selectedElement: CanvasElement | undefined;
@@ -105,16 +110,62 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
           <div className="p-4 border-b border-border-light dark:border-border-dark">
             <div className="flex justify-between items-center mb-3">
               <span className="text-xs font-semibold text-text-primary-light dark:text-text-primary-dark">Dimensions</span>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  title={isElementLocked(selectedElement) ? 'Unlock to move or resize' : 'Lock position and size'}
+                  onClick={() => {
+                    const nextLocked = !isElementLocked(selectedElement);
+                    onUpdateElements(selectedIds, { locked: nextLocked });
+                  }}
+                  className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide transition-all ${
+                    isElementLocked(selectedElement)
+                      ? 'bg-sky-500/15 text-sky-500'
+                      : 'bg-gray-100 dark:bg-black/20 text-text-secondary-light dark:text-text-secondary-dark'
+                  }`}
+                >
+                  {isElementLocked(selectedElement) ? <Lock size={12} /> : <Unlock size={12} />}
+                  Lock
+                </button>
+                {selectedElement.type === 'shape' && (
+                  <button
+                    type="button"
+                    title={selectedElement.snapToBox !== false ? 'Snap on — shape fills W×H' : 'Snap off'}
+                    onClick={() => {
+                      onUpdateElements(selectedIds, (el) => {
+                        if (el.type !== 'shape') return el;
+                        const nextOn = el.snapToBox === false;
+                        const pts = Array.isArray(el.points) && el.points[0] && typeof el.points[0] === 'object' && 'x' in el.points[0]
+                          ? (el.points as { x: number; y: number }[])
+                          : null;
+                        return {
+                          ...el,
+                          snapToBox: nextOn,
+                          points: nextOn && pts ? fitPointsToBox(pts, el.w, el.h) : el.points,
+                        };
+                      });
+                    }}
+                    className={`flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide transition-all ${
+                      selectedElement.snapToBox !== false
+                        ? 'bg-sky-500/15 text-sky-500'
+                        : 'bg-gray-100 dark:bg-black/20 text-text-secondary-light dark:text-text-secondary-dark'
+                    }`}
+                  >
+                    <Magnet size={12} />
+                    Snap
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Coordinates */}
             <div className="grid grid-cols-2 gap-2 mb-2">
-              <NumInput label="X" value={Math.round(selectedElement.x)} onChange={(v) => handleChange('x', v)} />
-              <NumInput label="Y" value={Math.round(selectedElement.y)} onChange={(v) => handleChange('y', v)} />
+              <NumInput label="X" value={Math.round(selectedElement.x)} onChange={(v) => handleChange('x', v)} disabled={isElementLocked(selectedElement)} />
+              <NumInput label="Y" value={Math.round(selectedElement.y)} onChange={(v) => handleChange('y', v)} disabled={isElementLocked(selectedElement)} />
             </div>
             <div className="grid grid-cols-2 gap-2 mb-2">
-              <NumInput label="W" value={Math.round(selectedElement.w)} onChange={(v) => handleChange('w', v)} />
-              <NumInput label="H" value={Math.round(selectedElement.h)} onChange={(v) => handleChange('h', v)} />
+              <NumInput label="W" value={Math.round(selectedElement.w)} onChange={(v) => handleChange('w', v)} disabled={isElementLocked(selectedElement)} />
+              <NumInput label="H" value={Math.round(selectedElement.h)} onChange={(v) => handleChange('h', v)} disabled={isElementLocked(selectedElement)} />
             </div>
             <div className="flex items-center rounded-lg px-2 py-1 group focus-within:ring-1 focus-within:ring-primary bg-gray-50 dark:bg-black/20 border border-transparent dark:border-white/5">
               <RotateCw size={12} className="text-text-secondary-dark mr-2" />
@@ -492,12 +543,13 @@ const AlignBtn = ({ icon, onClick, active }: { icon: React.ReactNode, onClick: (
   </button>
 );
 
-const NumInput = ({ label, value, onChange }: { label: string, value: number, onChange: (val: number) => void }) => (
-  <div className="flex items-center bg-gray-50 dark:bg-black/20 rounded px-2 py-1.5 group focus-within:ring-1 focus-within:ring-primary border border-transparent dark:border-white/5 transition-colors">
+const NumInput = ({ label, value, onChange, disabled }: { label: string, value: number, onChange: (val: number) => void, disabled?: boolean }) => (
+  <div className={`flex items-center bg-gray-50 dark:bg-black/20 rounded px-2 py-1.5 group focus-within:ring-1 focus-within:ring-primary border border-transparent dark:border-white/5 transition-colors ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
     <span className="text-[10px] text-text-secondary-light dark:text-text-secondary-dark w-3 group-hover:text-primary cursor-ew-resize font-mono font-medium">{label}</span>
     <input 
       type="number"
       value={value}
+      disabled={disabled}
       onChange={(e) => onChange(Number(e.target.value))}
       className="w-full bg-transparent border-none p-0 text-xs text-right focus:outline-none focus:ring-0 text-text-primary-light dark:text-text-primary-dark font-mono" 
     />

@@ -68,13 +68,13 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
         icon={<MousePointer2 size={18} />}
         isActive={activeTool === 'select'}
         onClick={() => onSetTool('select')}
-        tooltip="Select (M)"
+        tooltip="Select"
       />
       <ToolButton
         icon={<Hand size={18} />}
         isActive={activeTool === 'hand'}
         onClick={() => onSetTool('hand')}
-        tooltip="Hand Tool (H)"
+        tooltip="Hand"
       />
       <div className="w-px h-6 bg-border-light dark:bg-border-dark self-center mx-1"></div>
 
@@ -83,7 +83,7 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
         icon={<Type size={18} />}
         isActive={activeTool === 'placement' && false} // Just a trigger
         onClick={() => onSetTool('placement', 'text')}
-        tooltip="Text (T)"
+        tooltip="Text"
       />
       {/* Shape Dropdown */}
       <div className="relative" ref={shapeMenuRef}>
@@ -116,31 +116,31 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
         icon={<Edit3 size={18} />}
         isActive={activeTool === 'placement' && false}
         onClick={() => onSetTool('placement', 'path')}
-        tooltip="Pen (P)"
+        tooltip="Pen"
       />
       <ToolButton
         icon={<PenTool size={18} />}
         isActive={activeTool === 'polygon_draw'}
         onClick={() => onSetTool('polygon_draw')}
-        tooltip="Draw Polygon (G)"
+        tooltip="Polygon"
       />
       <ToolButton
         icon={<Sparkles size={18} />}
         isActive={false}
         onClick={onOpenMindMapGenerator}
-        tooltip="AI Mind Map Generator"
+        tooltip="Diagrams"
       />
       <ToolButton
         icon={<Play size={18} />}
         isActive={false}
         onClick={onOpenP5Generator}
-        tooltip="P5.js Generator (Insert to Canvas)"
+        tooltip="Sketch"
       />
       <ToolButton
         icon={<GeoGebraIcon size={18} />}
         isActive={false}
         onClick={onOpenAnimationHome}
-        tooltip="AI Animation Home"
+        tooltip="Simulate"
       />
 
       <div className="w-px h-6 bg-border-light dark:bg-border-dark self-center mx-1"></div>
@@ -149,7 +149,7 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
         icon={<Settings2 size={18} />}
         isActive={showCanvasSettings}
         onClick={onToggleCanvasSettings}
-        tooltip="Canvas Settings & Presets"
+        tooltip="Settings"
       />
 
       <div className="w-px h-6 bg-border-light dark:bg-border-dark self-center mx-1"></div>
@@ -157,10 +157,13 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
       {/* Main Add Button */}
       <button
         onClick={onOpenAddMenu}
-        title="Add Element (Space)"
-        className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 bg-primary text-white shadow-md hover:bg-primary-orange/90 hover:scale-105 active:scale-95`}
+        aria-label="Add"
+        className={`relative group/tip flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-200 bg-primary text-white shadow-md hover:bg-primary-orange/90 hover:scale-105 active:scale-95`}
       >
         <Plus size={20} />
+        <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-1.5 py-0.5 rounded bg-gray-900 text-white text-[10px] font-medium opacity-0 group-hover/tip:opacity-100 transition-opacity whitespace-nowrap z-[200]">
+          Add
+        </span>
       </button>
     </div>
   );
@@ -169,12 +172,15 @@ export const FloatingToolbar: React.FC<FloatingToolbarProps> = ({
 const ToolButton = ({ icon, isActive, onClick, tooltip }: { icon: React.ReactNode, isActive: boolean, onClick: () => void, tooltip: string }) => (
   <button
     onClick={onClick}
-    title={tooltip}
-    className={`p-2 rounded-lg transition-all duration-200 ${isActive
+    aria-label={tooltip}
+    className={`relative group/tip p-2 rounded-lg transition-all duration-200 ${isActive
         ? 'bg-primary/20 text-primary shadow-sm'
         : 'text-text-secondary-light dark:text-text-secondary-dark hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-text-primary-light dark:hover:text-white'
       }`}
   >
     {icon}
+    <span className="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-1.5 px-1.5 py-0.5 rounded bg-gray-900 text-white text-[10px] font-medium opacity-0 group-hover/tip:opacity-100 transition-opacity whitespace-nowrap z-[200]">
+      {tooltip}
+    </span>
   </button>
 );

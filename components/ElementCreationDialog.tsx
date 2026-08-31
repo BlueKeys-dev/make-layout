@@ -1,13 +1,9 @@
 import React from 'react';
 import { 
-  Type, 
   Image, 
   Table, 
   Network, 
-  Box, 
   Frame, 
-  PieChart, 
-  PenTool,
   X
 } from 'lucide-react';
 import { ElementType } from '../types';
@@ -28,14 +24,10 @@ export const ElementCreationDialog: React.FC<ElementCreationDialogProps> = ({
   if (!isOpen) return null;
 
   const tools = [
-    { type: 'text', label: 'Text Block', icon: <Type size={20} />, desc: 'Rich text area with typography controls.' },
     { type: 'image', label: 'Image', icon: <Image size={20} />, desc: 'Upload or paste images.' },
     { type: 'table', label: 'Table', icon: <Table size={20} />, desc: 'Structured data grid with rows/cols.' },
     { type: 'mindmap', label: 'Mind Map', icon: <Network size={20} />, desc: 'Node-based visualization.' },
-    { type: 'shape', label: 'Shape', icon: <Box size={20} />, desc: 'Geometric primitives.' },
-    { type: 'figure', label: 'Figure', icon: <PieChart size={20} />, desc: 'Chart or diagram placeholder.' },
     { type: 'container', label: 'Container', icon: <Frame size={20} />, desc: 'Group items together.' },
-    { type: 'path', label: 'Drawing', icon: <PenTool size={20} />, desc: 'Freehand vector path.' },
   ];
 
   const style = position 

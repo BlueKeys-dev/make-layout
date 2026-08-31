@@ -62,10 +62,10 @@ export const FreehandElement: React.FC<FreehandElementProps> = ({ element }) => 
 
   return (
     <div className="w-full h-full overflow-visible pointer-events-none">
-       <svg 
-            // Absolute positioning of content
-            style={{ overflow: 'visible' }}
-            className="w-full h-full"
+       <svg
+            viewBox={`0 0 ${element.w} ${element.h}`}
+            preserveAspectRatio="none"
+            className="w-full h-full overflow-visible"
         >
           <path d={pathData} fill={element.strokeColor || '#ec5b13'} />
        </svg>

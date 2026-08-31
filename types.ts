@@ -93,6 +93,8 @@ export type CanvasElement = {
   points?: number[][] | { x: number, y: number }[]; // For perfect-freehand: [x, y, pressure], or Shape vertices: {x, y}
   strokeColor?: string;
   strokeWidth?: number;
+  snapToBox?: boolean;
+  locked?: boolean;
   
   // Text specific properties
   textStyle?: TextStyle;

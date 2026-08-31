@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Upload, MoreHorizontal } from 'lucide-react';
+import { Upload, MoreHorizontal, Lock } from 'lucide-react';
 import { CanvasElement } from '../types';
 import { TableElement } from './TableElement';
 import { TextElement } from './TextElement';
@@ -8,8 +8,9 @@ import { MathElement } from './MathElement';
 import { GeoGebraElement } from './aniElement';
 import { FreehandElement } from './FreehandElement';
 import { P5Element } from './P5Element';
-import { SHAPES } from './ShapeLibrary';
+import { SHAPES, fitPointsToBox } from './ShapeLibrary';
 import { ShapeType } from '../types';
+import { isElementLocked } from '../utils/elementRegistry';
 
 interface CanvasElementRenderProps {
   element: CanvasElement;
@@ -174,16 +175,19 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
         // Check if it is a specific shape from our library
         if (element.type === 'shape' && element.shapeType && SHAPES[element.shapeType]) {
           const shapeDef = SHAPES[element.shapeType];
-          const points = (element.points as { x: number, y: number }[]) || shapeDef.createInitialPoints(element.w, element.h);
+          const rawPoints = (element.points as { x: number, y: number }[]) || shapeDef.createInitialPoints(element.w, element.h);
+          const snapOn = element.snapToBox !== false;
+          const points = snapOn ? fitPointsToBox(rawPoints, element.w, element.h) : rawPoints;
           const pathData = shapeDef.getPath(points, element.w, element.h);
 
           return (
-            <div className="w-full h-full relative group/shape">
+            <div className={`w-full h-full relative group/shape ${snapOn ? 'overflow-hidden' : ''}`}>
               <svg
                 width="100%"
                 height="100%"
                 viewBox={`0 0 ${element.w} ${element.h}`}
-                className="overflow-visible"
+                preserveAspectRatio={snapOn ? 'none' : 'xMidYMid meet'}
+                className={snapOn ? 'overflow-hidden' : 'overflow-visible'}
                 style={{ filter: 'drop-shadow(0 4px 6px -1px rgb(0 0 0 / 0.1))' }}
               >
                 <path
@@ -318,11 +322,13 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
     }
   };
 
+  const locked = isElementLocked(element);
+
   return (
     <div
       onMouseDown={(e) => !isEditing && onMouseDown(e, element.id)}
       onDoubleClick={handleDoubleClick}
-      className={`absolute cursor-move group ${isSelected ? 'z-50' : ''
+      className={`absolute ${locked ? 'cursor-default' : 'cursor-move'} group ${isSelected ? 'z-50' : ''
         }`}
       style={{
         left: element.x,
@@ -337,12 +343,13 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
         } rounded-sm ${isDraggingOver ? 'border-primary bg-primary/10' : ''}`} />
 
       {/* Element Label */}
-      <div className={`absolute -top-6 left-0 bg-sky-500 text-white text-[10px] px-2 py-0.5 rounded transition-opacity whitespace-nowrap shadow-sm pointer-events-none z-50 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+      <div className={`absolute -top-6 left-0 bg-sky-500 text-white text-[10px] px-2 py-0.5 rounded transition-opacity whitespace-nowrap shadow-sm pointer-events-none z-50 flex items-center gap-1 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+        {locked && <Lock size={10} />}
         {element.name}
       </div>
 
       {/* Resize Handles - Only corners for simplicity in this proto */}
-      {isSelected && !isEditing && (
+      {isSelected && !isEditing && !locked && (
         <>
           <div onMouseDown={(e) => { e.stopPropagation(); onResizeStart(e, element.id, 'nw'); }} className="absolute -top-1.5 -left-1.5 w-3 h-3 bg-white border border-sky-500 cursor-nw-resize hover:bg-sky-100 z-50 rounded-full" />
           <div onMouseDown={(e) => { e.stopPropagation(); onResizeStart(e, element.id, 'ne'); }} className="absolute -top-1.5 -right-1.5 w-3 h-3 bg-white border border-sky-500 cursor-ne-resize hover:bg-sky-100 z-50 rounded-full" />
@@ -352,7 +359,7 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
       )}
 
       {/* Content Rendering */}
-      <div className="w-full h-full overflow-hidden element-content-wrapper">
+      <div className={`w-full h-full element-content-wrapper ${element.type === 'path' ? 'overflow-visible' : 'overflow-hidden'}`}>
         {renderContent()}
       </div>
     </div>
