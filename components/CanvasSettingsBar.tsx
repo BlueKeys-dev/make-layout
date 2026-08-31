@@ -41,13 +41,21 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
   const currentGridRows = activeBoard?.boardConfig?.gridRows ?? config.gridRows;
   const currentGridCols = activeBoard?.boardConfig?.gridCols ?? config.gridCols;
 
+  const boardUpdateIds = activeBoard
+    ? (selectedIds.includes(activeBoard.id) ? selectedIds : [activeBoard.id])
+    : selectedIds;
+
+  const updateActiveBoards = (mutate: (el: CanvasElement) => CanvasElement) => {
+    onUpdateBoards(boardUpdateIds, (el) => {
+      if (el.type !== 'container') return el;
+      return mutate(el);
+    });
+  };
+
   const handlePresetChange = (key: keyof typeof CANVAS_PRESETS) => {
     const preset = CANVAS_PRESETS[key];
-    if (selectedIds.length > 0) {
-      onUpdateBoards(selectedIds, (el) => {
-        if (el.type !== 'container') return el;
-        return { ...el, w: preset.width, h: preset.height };
-      });
+    if (activeBoard) {
+      updateActiveBoards((el) => ({ ...el, w: preset.width, h: preset.height }));
     } else {
       setConfig({
         ...config,
@@ -60,122 +68,99 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
   };
 
   const handleColorChange = (color: string) => {
-    if (selectedIds.length > 0) {
-      onUpdateBoards(selectedIds, (el) => {
-        if (el.type !== 'container') return el;
-        return {
-          ...el,
-          color,
-          boardConfig: { ...(el.boardConfig || {}), backgroundColor: color }
-        };
-      });
+    if (activeBoard) {
+      updateActiveBoards((el) => ({
+        ...el,
+        color,
+        boardConfig: { ...(el.boardConfig || {}), backgroundColor: color }
+      }));
     } else {
       setConfig({ ...config, backgroundColor: color });
     }
   };
 
   const handleRadiusChange = (radius: number) => {
-    if (selectedIds.length > 0) {
-      onUpdateBoards(selectedIds, (el) => {
-        if (el.type !== 'container') return el;
-        return {
-          ...el,
-          boardConfig: { ...(el.boardConfig || {}), borderRadius: radius }
-        };
-      });
+    if (activeBoard) {
+      updateActiveBoards((el) => ({
+        ...el,
+        boardConfig: { ...(el.boardConfig || {}), borderRadius: radius }
+      }));
     } else {
       setConfig({ ...config, borderRadius: radius });
     }
   };
 
   const handleGridToggle = () => {
-    if (selectedIds.length > 0) {
-      // Use the current resolved value for all selected boards
-      const newShowGrid = !currentShowGrid;
-      onUpdateBoards(selectedIds, (el) => {
-        if (el.type !== 'container') return el;
-        return {
-          ...el,
-          boardConfig: { ...(el.boardConfig || {}), showGrid: newShowGrid }
-        };
-      });
+    const newShowGrid = !currentShowGrid;
+    if (activeBoard) {
+      updateActiveBoards((el) => ({
+        ...el,
+        boardConfig: { ...(el.boardConfig || {}), showGrid: newShowGrid }
+      }));
     } else {
-      setConfig({ ...config, showGrid: !currentShowGrid });
+      setConfig({ ...config, showGrid: newShowGrid });
     }
   };
 
   const handleGuidesToggle = () => {
-    if (selectedIds.length > 0) {
-      const newShowGuides = !currentShowGuides;
-      onUpdateBoards(selectedIds, (el) => {
-        if (el.type !== 'container') return el;
-        return {
-          ...el,
-          boardConfig: { ...(el.boardConfig || {}), showGuides: newShowGuides }
-        };
-      });
+    const newShowGuides = !currentShowGuides;
+    if (activeBoard) {
+      updateActiveBoards((el) => ({
+        ...el,
+        boardConfig: { ...(el.boardConfig || {}), showGuides: newShowGuides }
+      }));
     } else {
-      setConfig({ ...config, showGuides: !currentShowGuides });
+      setConfig({ ...config, showGuides: newShowGuides });
     }
   };
 
   const handleBleedToggle = () => {
-    if (selectedIds.length > 0) {
-      const newBleed = currentBleed ? 0 : 9;
-      onUpdateBoards(selectedIds, (el) => {
-        if (el.type !== 'container') return el;
-        return {
-          ...el,
-          boardConfig: { ...(el.boardConfig || {}), bleed: newBleed }
-        };
-      });
+    const newBleed = currentBleed ? 0 : 9;
+    if (activeBoard) {
+      updateActiveBoards((el) => ({
+        ...el,
+        boardConfig: { ...(el.boardConfig || {}), bleed: newBleed }
+      }));
     } else {
-      const newBleed = currentBleed ? 0 : 9;
       setConfig({ ...config, bleed: newBleed });
     }
   };
 
   const handleGridRowsChange = (rows: number) => {
-    if (selectedIds.length > 0) {
-      onUpdateBoards(selectedIds, (el) => {
-        if (el.type !== 'container') return el;
-        return {
-          ...el,
-          boardConfig: { ...(el.boardConfig || {}), gridRows: rows }
-        };
-      });
+    if (activeBoard) {
+      updateActiveBoards((el) => ({
+        ...el,
+        boardConfig: { ...(el.boardConfig || {}), gridRows: rows }
+      }));
     } else {
       setConfig({ ...config, gridRows: rows });
     }
   };
 
   const handleGridColsChange = (cols: number) => {
-    if (selectedIds.length > 0) {
-      onUpdateBoards(selectedIds, (el) => {
-        if (el.type !== 'container') return el;
-        return {
-          ...el,
-          boardConfig: { ...(el.boardConfig || {}), gridCols: cols }
-        };
-      });
+    if (activeBoard) {
+      updateActiveBoards((el) => ({
+        ...el,
+        boardConfig: { ...(el.boardConfig || {}), gridCols: cols }
+      }));
     } else {
       setConfig({ ...config, gridCols: cols });
     }
   };
 
   return (
-    <div className="absolute top-6 left-1/2 transform -translate-x-1/2 mt-14 z-20 bg-surface-light dark:bg-surface-dark shadow-floating dark:shadow-floating-dark rounded-xl p-2 flex items-center gap-3 border border-border-light dark:border-border-dark dark:border-2 transition-all">
+    <div className="absolute top-6 left-1/2 z-20 mt-14 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-border-light bg-surface-light p-1.5 shadow-floating transition-all dark:border-2 dark:border-border-dark dark:bg-surface-dark dark:shadow-floating-dark lg:max-w-none lg:flex-nowrap lg:justify-start lg:gap-3 lg:p-2">
 
       {/* Add Board */}
       <button
         onClick={onAddPage}
-        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white shadow-md hover:bg-primary-orange/90 transition-all font-semibold text-xs whitespace-nowrap"
+        className="flex items-center gap-1.5 rounded-lg bg-primary px-2 py-1.5 text-xs font-semibold text-white shadow-md transition-all hover:bg-primary-orange/90 lg:px-3 lg:py-2"
         title="Add New Board"
       >
         <Plus size={16} />
       </button>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Aspect Ratio Presets */}
       <div className="flex items-center gap-1 bg-gray-100 dark:bg-black/20 p-1 rounded-lg">
@@ -202,52 +187,59 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
         </button>
       </div>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Flipbook Toggle */}
       <button
         onClick={() => setConfig({ ...config, isFlipbook: !config.isFlipbook })}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${config.isFlipbook
+        title="Flipbook"
+        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold transition-all lg:px-3 ${config.isFlipbook
           ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20'
           : 'text-text-secondary-light dark:text-text-secondary-dark hover:bg-gray-100 dark:hover:bg-gray-800'
           }`}
       >
         <BookOpen size={16} />
-        <span>Flipbook</span>
+        <span className="hidden lg:inline">Flipbook</span>
       </button>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Guides & Bleed */}
       <div className="flex items-center gap-1">
-        <button
-          onClick={handleGuidesToggle}
-          className={`p-1.5 rounded transition-all ${currentShowGuides ? 'bg-white dark:bg-gray-700 shadow-sm text-sky-500' : 'text-text-secondary-light hover:text-text-primary-light dark:text-text-secondary-dark'}`}
-          title="Toggle Guides"
-        >
-          <Grid3X3 size={16} />
-        </button>
+        <HoverTip label="Guides">
+          <button
+            onClick={handleGuidesToggle}
+            className={`p-1.5 rounded transition-all ${currentShowGuides ? 'bg-white dark:bg-gray-700 shadow-sm text-sky-500' : 'text-text-secondary-light hover:text-text-primary-light dark:text-text-secondary-dark'}`}
+            title="Guides"
+          >
+            <Grid3X3 size={16} />
+          </button>
+        </HoverTip>
 
-        <button
-          onClick={handleBleedToggle}
-          className={`p-1.5 rounded transition-all ${currentBleed > 0 ? 'bg-white dark:bg-gray-700 shadow-sm text-red-500' : 'text-text-secondary-light hover:text-text-primary-light dark:text-text-secondary-dark'}`}
-          title="Toggle Print Bleed (3mm/9pt)"
-        >
-          <Printer size={16} />
-        </button>
+        <HoverTip label="Bleed">
+          <button
+            onClick={handleBleedToggle}
+            className={`p-1.5 rounded transition-all ${currentBleed > 0 ? 'bg-white dark:bg-gray-700 shadow-sm text-red-500' : 'text-text-secondary-light hover:text-text-primary-light dark:text-text-secondary-dark'}`}
+            title="Bleed"
+          >
+            <Printer size={16} />
+          </button>
+        </HoverTip>
       </div>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Grid Settings */}
       <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/20 p-1 rounded-lg">
-        <button
-          onClick={handleGridToggle}
-          className={`p-1.5 rounded transition-all ${currentShowGrid ? 'bg-white dark:bg-gray-700 shadow-sm text-primary' : 'text-text-secondary-light hover:text-text-primary-light dark:text-text-secondary-dark'}`}
-          title="Toggle Grid"
-        >
-          <Grid3X3 size={16} />
-        </button>
+        <HoverTip label="Grid">
+          <button
+            onClick={handleGridToggle}
+            className={`p-1.5 rounded transition-all ${currentShowGrid ? 'bg-white dark:bg-gray-700 shadow-sm text-primary' : 'text-text-secondary-light hover:text-text-primary-light dark:text-text-secondary-dark'}`}
+            title="Grid"
+          >
+            <Grid3X3 size={16} />
+          </button>
+        </HoverTip>
         {currentShowGrid && (
           <div className="flex items-center gap-2 px-1 animate-in fade-in slide-in-from-left-2 duration-200">
             <div className="flex items-center gap-1">
@@ -277,22 +269,23 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
         )}
       </div>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Corner Smoothness */}
-      <div className="flex items-center gap-2 px-2">
-        <span className="text-[10px] uppercase font-bold text-text-secondary-dark">Radius</span>
+      <div className="flex items-center gap-1 px-1 lg:gap-2 lg:px-2">
+        <span className="hidden text-[10px] uppercase font-bold text-text-secondary-dark lg:inline">Radius</span>
         <input
           type="range"
           min="0"
           max="40"
           value={currentRadius}
           onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
-          className="w-16 h-1 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary"
+          title="Radius"
+          className="h-1 w-10 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-primary lg:w-16 dark:bg-gray-700"
         />
       </div>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Color Selection */}
       <div className="flex items-center gap-1">
@@ -309,3 +302,14 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
     </div>
   );
 };
+
+function HoverTip({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <span className="relative inline-flex group/tip">
+      {children}
+      <span className="pointer-events-none absolute top-full left-1/2 z-50 mt-1.5 -translate-x-1/2 whitespace-nowrap rounded-md bg-gray-900 px-1.5 py-0.5 text-[10px] font-semibold text-white opacity-0 shadow-sm transition-opacity group-hover/tip:opacity-100 dark:bg-gray-100 dark:text-gray-900">
+        {label}
+      </span>
+    </span>
+  );
+}

@@ -167,9 +167,16 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <NumInput label="W" value={Math.round(selectedElement.w)} onChange={(v) => handleChange('w', v)} disabled={isElementLocked(selectedElement)} />
               <NumInput label="H" value={Math.round(selectedElement.h)} onChange={(v) => handleChange('h', v)} disabled={isElementLocked(selectedElement)} />
             </div>
-            <div className="flex items-center rounded-lg px-2 py-1 group focus-within:ring-1 focus-within:ring-primary bg-gray-50 dark:bg-black/20 border border-transparent dark:border-white/5">
-              <RotateCw size={12} className="text-text-secondary-dark mr-2" />
-              <input className="w-full bg-transparent border-none p-0 text-xs text-right focus:outline-none text-text-primary-light dark:text-text-primary-dark font-mono" defaultValue="0°" />
+            <div className={`flex items-center rounded-lg px-2 py-1 group focus-within:ring-1 focus-within:ring-primary bg-gray-50 dark:bg-black/20 border border-transparent dark:border-white/5 ${isElementLocked(selectedElement) ? 'opacity-50 pointer-events-none' : ''}`}>
+              <RotateCw size={12} className="text-text-secondary-dark mr-2 shrink-0" />
+              <input
+                type="number"
+                value={Math.round(selectedElement.rotation ?? 0)}
+                disabled={isElementLocked(selectedElement)}
+                onChange={(e) => handleChange('rotation', Number(e.target.value) || 0)}
+                className="w-full bg-transparent border-none p-0 text-xs text-right focus:outline-none text-text-primary-light dark:text-text-primary-dark font-mono"
+              />
+              <span className="ml-0.5 text-xs font-mono text-text-secondary-dark">°</span>
             </div>
           </div>
 

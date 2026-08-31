@@ -172,16 +172,10 @@ export const useKeyboardShortcuts = ({
              }
         };
 
-        // Block browser zoom via Ctrl+Wheel and apply canvas zoom instead
+        // Block browser zoom via Ctrl+Wheel. Canvas zoom is handled in DesignEditor.
         const handleWheel = (e: WheelEvent) => {
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
-                // Apply canvas zoom: scroll up = zoom in, scroll down = zoom out
-                if (e.deltaY < 0) {
-                    setScale(s => Math.min(s + 0.1, 3));
-                } else if (e.deltaY > 0) {
-                    setScale(s => Math.max(s - 0.1, 0.2));
-                }
             }
         };
 

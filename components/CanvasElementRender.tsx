@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Upload, MoreHorizontal, Lock } from 'lucide-react';
-import { CanvasElement } from '../types';
+import { CanvasConfig, CanvasElement } from '../types';
+import { DEFAULT_CANVAS_CONFIG, getSafeZones } from '../config/canvasDefaults';
 import { TableElement } from './TableElement';
 import { TextElement } from './TextElement';
 import { MindMapElement } from './MindMapElement';
@@ -19,6 +20,7 @@ interface CanvasElementRenderProps {
   onResizeStart: (e: React.MouseEvent, id: string, handle: 'nw' | 'ne' | 'sw' | 'se') => void;
   onUpdateElement?: (id: string, updates: Partial<CanvasElement>) => void;
   scale?: number; // Added for correct dragging
+  canvasConfig?: CanvasConfig;
 }
 
 export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
@@ -26,7 +28,8 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
   isSelected,
   onMouseDown,
   onResizeStart,
-  onUpdateElement
+  onUpdateElement,
+  canvasConfig
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isDraggingOver, setIsDraggingOver] = useState(false);
@@ -249,11 +252,19 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
         const isBoard = element.type === 'container';
         const bgColor = element.boardConfig?.backgroundColor || element.color || '#ffffff';
         const borderRadius = element.boardConfig?.borderRadius ?? 0;
-        const showGrid = element.boardConfig?.showGrid;
-        const gridRows = element.boardConfig?.gridRows ?? 4;
-        const gridCols = element.boardConfig?.gridCols ?? 4;
-        const showGuides = element.boardConfig?.showGuides;
-        const bleed = element.boardConfig?.bleed ?? 0;
+        const showGrid = element.boardConfig?.showGrid ?? canvasConfig?.showGrid ?? DEFAULT_CANVAS_CONFIG.showGrid;
+        const gridRows = element.boardConfig?.gridRows ?? canvasConfig?.gridRows ?? DEFAULT_CANVAS_CONFIG.gridRows;
+        const gridCols = element.boardConfig?.gridCols ?? canvasConfig?.gridCols ?? DEFAULT_CANVAS_CONFIG.gridCols;
+        const showGuides = element.boardConfig?.showGuides ?? canvasConfig?.showGuides ?? DEFAULT_CANVAS_CONFIG.showGuides;
+        const bleed = element.boardConfig?.bleed ?? canvasConfig?.bleed ?? DEFAULT_CANVAS_CONFIG.bleed;
+        const boardSafeZones = isBoard && showGuides
+          ? getSafeZones({
+              ...(canvasConfig ?? DEFAULT_CANVAS_CONFIG),
+              width: element.w,
+              height: element.h,
+              isFlipbook: false,
+            })
+          : [];
 
         // Compute contrast color for text inside this board
         const getContrastColor = (c: string) => {
@@ -283,7 +294,7 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
 
         return (
           <div
-            className={`w-full h-full flex items-center justify-center text-slate-700/50 select-none ${!element.color?.startsWith('#') && !element.color?.startsWith('rgb') && element.color !== 'transparent' ? element.color : ''} ${isBoard ? 'shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden' : ''}`}
+            className={`w-full h-full flex items-center justify-center text-slate-700/50 select-none ${!element.color?.startsWith('#') && !element.color?.startsWith('rgb') && element.color !== 'transparent' ? element.color : ''} ${isBoard ? 'relative shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden' : ''}`}
             style={{
               backgroundColor: bgColor,
               borderRadius: isBoard ? `${borderRadius}px` : undefined,
@@ -295,7 +306,7 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
 
             {/* Board Grid Overlay */}
             {isBoard && showGrid && (
-              <div className="absolute inset-0 pointer-events-none">
+              <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ borderRadius: `${borderRadius}px` }}>
                 {Array.from({ length: gridCols + 1 }).map((_, i) => (
                   <div key={`v-${i}`} className="absolute top-0 bottom-0" style={{ left: `${(i / gridCols) * 100}%`, borderLeft: `1px solid ${gridLineColor}` }} />
                 ))}
@@ -308,8 +319,15 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
             {/* Board Guides */}
             {isBoard && showGuides && (
               <>
-                <div className="absolute top-0 bottom-0 left-1/2 border-l border-dashed border-cyan-400/40 pointer-events-none" />
-                <div className="absolute left-0 right-0 top-1/2 border-t border-dashed border-cyan-400/40 pointer-events-none" />
+                {boardSafeZones.map((z, i) => (
+                  <div
+                    key={`safe-${i}`}
+                    className="absolute border-2 border-dashed border-cyan-400/60 pointer-events-none z-50 shadow-[0_0_4px_rgba(34,211,238,0.3)]"
+                    style={{ top: z.y, left: z.x, width: z.w, height: z.h }}
+                  />
+                ))}
+                <div className="absolute top-0 bottom-0 left-1/2 border-l border-dashed border-sky-300/30 pointer-events-none z-40" />
+                <div className="absolute left-0 right-0 top-1/2 border-t border-dashed border-sky-300/30 pointer-events-none z-40" />
               </>
             )}
 
@@ -336,6 +354,8 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
         width: element.w,
         height: element.h,
         zIndex: element.zIndex,
+        transform: `rotate(${element.rotation ?? 0}deg)`,
+        transformOrigin: 'center center',
       }}
     >
       {/* Selection Border */}

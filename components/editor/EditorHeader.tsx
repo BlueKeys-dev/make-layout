@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Download, ImageIcon, FileText, Presentation, FileJson, Upload } from 'lucide-react';
 import { downloadAsPNG, downloadAsPDF, downloadAsPPTX, exportAsJSON } from '../../utils/exportUtils';
 import { CanvasConfig, CanvasElement } from '../../types';
@@ -11,6 +11,7 @@ interface EditorHeaderProps {
   setPages: (pages: CanvasElement[][]) => void;
   setCurrentPage: (page: number) => void;
   onShowPDFViewer: () => void;
+  stackVertical?: boolean;
 }
 
 export const EditorHeader: React.FC<EditorHeaderProps> = ({
@@ -21,10 +22,41 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   setPages,
   setCurrentPage,
   onShowPDFViewer,
+  stackVertical = false,
 }) => {
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showImportMenu, setShowImportMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const headerRef = useRef<HTMLDivElement>(null);
+  const menuOpen = showExportMenu || showImportMenu;
+
+  useEffect(() => {
+    if (!menuOpen) return;
+
+    const closeMenus = () => {
+      setShowExportMenu(false);
+      setShowImportMenu(false);
+    };
+
+    const closeOnOutside = (e: PointerEvent) => {
+      const target = e.target;
+      if (target instanceof Node && headerRef.current?.contains(target)) return;
+      closeMenus();
+    };
+
+    const closeOnEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeMenus();
+    };
+
+    document.addEventListener('pointerdown', closeOnOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    const autoClose = window.setTimeout(closeMenus, 3000);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+      window.clearTimeout(autoClose);
+    };
+  }, [menuOpen, showExportMenu, showImportMenu]);
 
   const handleImportJSON = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -53,20 +85,24 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
   };
 
   return (
-    <div className="absolute top-2 right-6 z-40 flex gap-3">
+    <div ref={headerRef} className={`absolute top-2 right-6 z-40 flex gap-3 ${stackVertical ? 'flex-col' : 'flex-row'}`}>
       <div className="relative">
         <button
           type="button"
-          className="bg-white dark:bg-surface-dark hover:bg-gray-100 dark:hover:bg-gray-800 text-text-primary-light dark:text-text-primary-dark border border-border-light dark:border-border-dark p-2 rounded-lg shadow-lg transition-all flex items-center justify-center"
-          onClick={() => setShowExportMenu(!showExportMenu)}
+          className="w-10 h-10 rounded-full bg-white dark:bg-surface-dark hover:bg-gray-100 dark:hover:bg-gray-800 text-text-primary-light dark:text-text-primary-dark border border-border-light dark:border-border-dark shadow-lg transition-all flex items-center justify-center"
+          onClick={() => {
+            setShowExportMenu((open) => !open);
+            setShowImportMenu(false);
+          }}
           title="Export"
           aria-label="Export"
+          aria-expanded={showExportMenu}
         >
-          <Download size={16} />
+          <Download size={18} />
         </button>
 
         {showExportMenu && (
-          <div className="absolute right-0 top-full mt-2 w-56 bg-white dark:bg-surface-dark rounded-xl shadow-xl border border-border-light dark:border-border-dark overflow-hidden flex flex-col p-1 animate-in fade-in slide-in-from-top-2">
+          <div className={`bg-white dark:bg-surface-dark rounded-xl shadow-xl border border-border-light dark:border-border-dark overflow-hidden flex flex-col p-1 animate-in fade-in ${stackVertical ? 'absolute right-full top-0 mr-2 w-56 slide-in-from-right-2' : 'absolute right-0 top-full mt-2 w-56 slide-in-from-top-2'}`}>
             <button className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-left text-sm transition-colors"
               onClick={() => { downloadAsPNG(canvasRef); setShowExportMenu(false); }}
             >
@@ -111,19 +147,23 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
       <div className="relative">
         <button
           type="button"
-          className="bg-primary hover:bg-primary-orange/80 text-white p-2 rounded-lg shadow-lg transition-all flex items-center justify-center"
-          onClick={() => setShowImportMenu(!showImportMenu)}
+          className="w-10 h-10 rounded-full bg-primary hover:bg-primary-orange/80 text-white shadow-lg transition-all flex items-center justify-center"
+          onClick={() => {
+            setShowImportMenu((open) => !open);
+            setShowExportMenu(false);
+          }}
           title="Import"
           aria-label="Import"
+          aria-expanded={showImportMenu}
         >
-          <Upload size={16} />
+          <Upload size={18} />
         </button>
 
         {showImportMenu && (
-          <div className="absolute right-0 top-full mt-2 w-48 bg-white dark:bg-surface-dark rounded-xl shadow-xl border border-border-light dark:border-border-dark overflow-hidden flex flex-col p-1 animate-in fade-in slide-in-from-top-2">
+          <div className={`bg-white dark:bg-surface-dark rounded-xl shadow-xl border border-border-light dark:border-border-dark overflow-hidden flex flex-col p-1 animate-in fade-in ${stackVertical ? 'absolute right-full top-0 mr-2 w-48 slide-in-from-right-2' : 'absolute right-0 top-full mt-2 w-48 slide-in-from-top-2'}`}>
             <button 
               className="flex items-center gap-3 px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg text-left text-sm transition-colors"
-              onClick={() => { fileInputRef.current?.click(); }}
+              onClick={() => { fileInputRef.current?.click(); setShowImportMenu(false); }}
             >
               <div className="p-1.5 bg-green-100 text-green-600 rounded-md"><FileJson size={14} /></div>
               <span>Import JSON</span>

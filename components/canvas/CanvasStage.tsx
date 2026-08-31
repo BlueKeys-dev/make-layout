@@ -71,6 +71,9 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseDown={onMouseDown}
+      onMouseLeave={(e) => {
+        if (e.buttons) onMouseUp(e);
+      }}
       style={{
         backgroundImage: 'radial-gradient(circle, #94a3b8aa 1.5px, transparent 1.5px)',
         backgroundSize: '24px 24px',
@@ -82,11 +85,12 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
       {/* Canvas World Origin */}
       <div
         ref={canvasRef}
-        className="relative transition-transform duration-75 ease-out origin-center"
+        className="relative origin-top-left"
         style={{
           width: 0,
           height: 0,
           transform: `translate(${viewPos.x}px, ${viewPos.y}px) scale(${scale})`,
+          transformOrigin: '0 0',
           overflow: 'visible' // Allow infinite children
         }}
       >
@@ -190,6 +194,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
             onUpdateElement={(id, ups) => {
               setElements(prev => prev.map(e => e.id === id ? { ...e, ...ups } : e));
             }}
+            canvasConfig={canvasConfig}
           />
         ))}
 
