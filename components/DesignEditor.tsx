@@ -27,6 +27,34 @@ import { PDFViewer } from './PDFViewer';
 import { SHAPES } from './ShapeLibrary';
 import { ShapeType } from '../types';
 
+type Bounds = { x: number; y: number; w: number; h: number };
+
+const getElementBounds = (el: CanvasElement): Bounds => {
+    if (el.type === 'path' && Array.isArray(el.points) && el.points.length > 0 && Array.isArray(el.points[0])) {
+        let minX = Infinity;
+        let minY = Infinity;
+        let maxX = -Infinity;
+        let maxY = -Infinity;
+        for (const pt of el.points as number[][]) {
+            minX = Math.min(minX, pt[0]);
+            minY = Math.min(minY, pt[1]);
+            maxX = Math.max(maxX, pt[0]);
+            maxY = Math.max(maxY, pt[1]);
+        }
+        return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
+    }
+    return { x: el.x, y: el.y, w: el.w, h: el.h };
+};
+
+const rectsOverlap = (a: Bounds, b: Bounds) =>
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+
+const normalizeRect = (start: { x: number; y: number }, current: { x: number; y: number }): Bounds => {
+    const x = Math.min(start.x, current.x);
+    const y = Math.min(start.y, current.y);
+    return { x, y, w: Math.abs(current.x - start.x), h: Math.abs(current.y - start.y) };
+};
+
 const getInitialPages = (): CanvasElement[][] => {
     try {
         const saved = localStorage.getItem('ai-layout-pages');
@@ -55,14 +83,17 @@ export const DesignEditor = () => {
     const elements = pages[currentPage];
 
     // Helper: Update elements for current page
-    const setElements = useCallback((value: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[])) => {
+    const setElements = useCallback((
+        value: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[]),
+        shouldPush = true
+    ) => {
         setPages(prevPages => {
             const newPages = [...prevPages];
             const nextElements = typeof value === 'function' ? value(newPages[currentPage]) : value;
             newPages[currentPage] = nextElements;
             return newPages;
-        });
-    }, [currentPage]);
+        }, shouldPush);
+    }, [currentPage, setPages]);
 
     // -- Interaction State --
     const [activeTool, setActiveTool] = useState('select');
@@ -107,6 +138,10 @@ export const DesignEditor = () => {
     const activeDrawingIdRef = useRef<string | null>(null); // Track actively drawing path element
     const pointsBufferRef = useRef<number[][]>([]); // Buffer for high-frequency point collection
     const rafIdRef = useRef<number | null>(null); // RequestAnimationFrame ID
+    const marqueeRef = useRef<{ start: { x: number; y: number }; additive: boolean; baseIds: string[] } | null>(null);
+    const elementsRef = useRef<CanvasElement[]>([]);
+    const marqueeRectRef = useRef<Bounds | null>(null);
+    const [marqueeRect, setMarqueeRect] = useState<Bounds | null>(null);
     const { width: logicalWidth, height: logicalHeight } = getEffectiveDimensions(canvasConfig);
 
     // -- Interaction Hooks --
@@ -178,6 +213,63 @@ export const DesignEditor = () => {
             y: (clientY - rect.top) / scale
         };
     }, [scale, viewPos]); // viewPos dependency implicitly handled by getBoundingClientRect, but kept for clarity
+
+    useEffect(() => {
+        elementsRef.current = elements;
+    }, [elements]);
+
+    const applyMarqueeHits = useCallback((rect: Bounds, additive: boolean, baseIds: string[]) => {
+        const hits = elementsRef.current
+            .filter(el => rectsOverlap(rect, getElementBounds(el)))
+            .map(el => el.id);
+        setSelectedIds(additive ? [...new Set([...baseIds, ...hits])] : hits);
+    }, [setSelectedIds]);
+
+    const finishMarquee = useCallback(() => {
+        const marquee = marqueeRef.current;
+        if (!marquee) return;
+        const rect = marqueeRectRef.current;
+        marqueeRef.current = null;
+        marqueeRectRef.current = null;
+        setMarqueeRect(null);
+        if (!rect || (rect.w < 4 && rect.h < 4)) {
+            setSelectedIds(marquee.additive ? marquee.baseIds : []);
+            return;
+        }
+        applyMarqueeHits(rect, marquee.additive, marquee.baseIds);
+    }, [applyMarqueeHits, setSelectedIds]);
+
+    useEffect(() => {
+        const onMove = (e: MouseEvent) => {
+            const marquee = marqueeRef.current;
+            if (!marquee) return;
+            const coords = getCanvasCoordinates(e.clientX, e.clientY);
+            const rect = normalizeRect(marquee.start, coords);
+            marqueeRectRef.current = rect;
+            setMarqueeRect(rect);
+            if (rect.w >= 4 || rect.h >= 4) {
+                applyMarqueeHits(rect, marquee.additive, marquee.baseIds);
+            }
+        };
+        const onUp = () => {
+            if (marqueeRef.current) finishMarquee();
+        };
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && marqueeRef.current) {
+                marqueeRef.current = null;
+                marqueeRectRef.current = null;
+                setMarqueeRect(null);
+            }
+        };
+        window.addEventListener('mousemove', onMove);
+        window.addEventListener('mouseup', onUp);
+        window.addEventListener('keydown', onKey);
+        return () => {
+            window.removeEventListener('mousemove', onMove);
+            window.removeEventListener('mouseup', onUp);
+            window.removeEventListener('keydown', onKey);
+        };
+    }, [getCanvasCoordinates, applyMarqueeHits, finishMarquee, setSelectedIds]);
 
     const initiatePlacement = (type: ElementType, shapeType?: ShapeType) => {
         // Clear any polygon drawing in progress
@@ -252,6 +344,17 @@ export const DesignEditor = () => {
         }
 
         handleElementDragMove(e);
+
+        if (marqueeRef.current) {
+            const coords = getCanvasCoordinates(e.clientX, e.clientY);
+            const rect = normalizeRect(marqueeRef.current.start, coords);
+            marqueeRectRef.current = rect;
+            setMarqueeRect(rect);
+            if (rect.w >= 4 || rect.h >= 4) {
+                applyMarqueeHits(rect, marqueeRef.current.additive, marqueeRef.current.baseIds);
+            }
+            return;
+        }
 
         // Track mouse position for polygon drawing preview
         if (activeTool === 'polygon_draw') {
@@ -398,8 +501,17 @@ export const DesignEditor = () => {
 
         } else {
             if (e.target === e.currentTarget || (canvasRef.current && canvasRef.current.contains(e.target as Node))) {
-                // If clicking background and NOT in hand mode, deselect
-                if (activeTool === 'select' && !e.shiftKey) setSelectedIds([]);
+                if (activeTool === 'select') {
+                    const coords = getCanvasCoordinates(e.clientX, e.clientY);
+                    marqueeRef.current = {
+                        start: coords,
+                        additive: e.shiftKey,
+                        baseIds: e.shiftKey ? [...selectedIds] : [],
+                    };
+                    if (!e.shiftKey) setSelectedIds([]);
+                    marqueeRectRef.current = { x: coords.x, y: coords.y, w: 0, h: 0 };
+                    setMarqueeRect({ x: coords.x, y: coords.y, w: 0, h: 0 });
+                }
             }
         }
     };
@@ -411,6 +523,11 @@ export const DesignEditor = () => {
         }
 
         handleElementDragEnd();
+
+        if (marqueeRef.current) {
+            finishMarquee();
+            return;
+        }
 
         if (activeTool === 'placement' && pendingElementType && placementStart) {
             // For Path, we are done with this stroke.
@@ -1062,6 +1179,7 @@ export const DesignEditor = () => {
                     viewPos={viewPos}
                     drawingPolygonVertices={drawingPolygonVertices}
                     polygonPreviewMousePos={polygonPreviewMousePos}
+                    marqueeRect={marqueeRect}
                 />
 
                 <EditorFooter

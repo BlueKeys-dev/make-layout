@@ -117,6 +117,55 @@
         background: var(--ggb-background-color) !important;
         border-radius: var(--ggb-border-radius) !important;
       }
+
+      #app-preload {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0f0f13;
+        color: #e2e8f0;
+        font-family: Inter, sans-serif;
+      }
+      #app-preload[hidden] {
+        display: none;
+      }
+      .app-preload-inner {
+        width: 100%;
+        max-width: 24rem;
+        padding: 0 1.5rem;
+      }
+      .app-preload-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+      }
+      .app-preload-track {
+        height: 0.5rem;
+        width: 100%;
+        overflow: hidden;
+        border-radius: 9999px;
+        background: rgba(236, 91, 19, 0.2);
+      }
+      .app-preload-bar {
+        height: 100%;
+        width: 0%;
+        background: #ec5b13;
+        animation: preload-fill 2.5s ease-out forwards;
+      }
+      @keyframes preload-fill {
+        from {
+          width: 0%;
+        }
+        to {
+          width: 80%;
+        }
+      }
     </style>
 
     <!-- GeoGebra Service Worker for Caching (only works on HTTPS) -->
@@ -157,6 +206,16 @@
   </head>
   <body>
     <div id="root"></div>
+    <div id="app-preload" role="status" aria-label="Loading editor">
+      <div class="app-preload-inner">
+        <div class="app-preload-header">
+          <span>Loading editor</span>
+        </div>
+        <div class="app-preload-track">
+          <div class="app-preload-bar"></div>
+        </div>
+      </div>
+    </div>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

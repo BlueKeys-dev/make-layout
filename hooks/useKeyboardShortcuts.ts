@@ -53,6 +53,12 @@ export const useKeyboardShortcuts = ({
             
             const isCtrl = e.ctrlKey || e.metaKey;
 
+            if (e.key === 'Escape' || e.code === 'Escape') {
+                e.preventDefault();
+                setSelectedIds([]);
+                return;
+            }
+
             // Tools
             if (!isCtrl && !e.shiftKey) {
                 if(e.key === 'm' || e.code === 'KeyM') setActiveTool('select');
@@ -96,6 +102,10 @@ export const useKeyboardShortcuts = ({
                 if (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey)) {
                     e.preventDefault();
                     redo();
+                }
+                if (e.code === 'KeyA') {
+                    e.preventDefault();
+                    setSelectedIds(elementsRef.current.map(el => el.id));
                 }
             }
 
@@ -184,5 +194,5 @@ export const useKeyboardShortcuts = ({
             window.removeEventListener('paste', handlePaste);
             window.removeEventListener('wheel', handleWheel);
         };
-    }, [deleteSelectedElement, setActiveTool, setIsAddMenuOpen, initiatePlacement, setScale, setElements, undo, redo, removeLastPolygonVertex]);
+    }, [deleteSelectedElement, setActiveTool, setIsAddMenuOpen, initiatePlacement, setScale, setElements, setSelectedIds, undo, redo, removeLastPolygonVertex]);
 };

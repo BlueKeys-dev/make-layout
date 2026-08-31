@@ -23,6 +23,7 @@ interface CanvasStageProps {
   viewPos?: { x: number; y: number };
   drawingPolygonVertices?: { x: number, y: number }[];
   polygonPreviewMousePos?: { x: number, y: number } | null;
+  marqueeRect?: { x: number; y: number; w: number; h: number } | null;
 }
 
 const getContrastColor = (color: string) => {
@@ -54,7 +55,8 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
   onResizeStart,
   viewPos = { x: 0, y: 0 },
   drawingPolygonVertices = [],
-  polygonPreviewMousePos = null
+  polygonPreviewMousePos = null,
+  marqueeRect = null
 }) => {
   const { width: logicalWidth, height: logicalHeight } = getEffectiveDimensions(canvasConfig);
   const safeZones = getSafeZones(canvasConfig);
@@ -272,6 +274,18 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
               />
             )}
           </svg>
+        )}
+
+        {marqueeRect && (marqueeRect.w > 0 || marqueeRect.h > 0) && (
+          <div
+            className="absolute pointer-events-none z-[200] border border-sky-500 bg-sky-500/10"
+            style={{
+              left: marqueeRect.x,
+              top: marqueeRect.y,
+              width: marqueeRect.w,
+              height: marqueeRect.h,
+            }}
+          />
         )}
       </div>
     </main>

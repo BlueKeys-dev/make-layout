@@ -38,7 +38,7 @@ export const createElementFactory = (
         textStyle: {
           fontSize: 16,
           fontWeight: 'normal',
-          textAlign: 'left',
+          textAlign: 'center',
           color: '#111827'
         }
       };

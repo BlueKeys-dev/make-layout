@@ -341,7 +341,6 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
   const [isEditingPrompt, setIsEditingPrompt] = useState<boolean>(false);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isInputFocused, setIsInputFocused] = useState<boolean>(false);
-  const [shimmerPosition, setShimmerPosition] = useState<number>(0);
   const [showP5Generator, setShowP5Generator] = useState<boolean>(false);
   const [showInfographics, setShowInfographics] = useState<boolean>(false);
 
@@ -349,29 +348,11 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
   const heroRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const welcomeTextRef = useRef<HTMLHeadingElement>(null);
-  const sendBtnRef = useRef<HTMLButtonElement>(null);
-  const closeBtnRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // --- Geometric Shapes State ---
   const [showShapes, setShowShapes] = useState(true);
   const shapesContainerRef = useRef<HTMLDivElement>(null);
-
-  // --- Shimmer Track Effect for Input ---
-  useEffect(() => {
-    if (!isInputFocused || !inputRef.current) return;
-
-    const updateShimmer = (e: MouseEvent) => {
-      const rect = inputRef.current?.parentElement?.getBoundingClientRect();
-      if (rect) {
-        const x = ((e.clientX - rect.left) / rect.width) * 100;
-        setShimmerPosition(Math.max(0, Math.min(100, x)));
-      }
-    };
-
-    window.addEventListener('mousemove', updateShimmer);
-    return () => window.removeEventListener('mousemove', updateShimmer);
-  }, [isInputFocused]);
 
   // --- GSAP Setup with Organic Absorption Animation ---
   useEffect(() => {
@@ -710,51 +691,6 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
           }
         );
       }
-
-      // Enhanced Magnetic Button Physics
-      [sendBtnRef, closeBtnRef].forEach(ref => {
-        if (!ref.current) return;
-        const btn = ref.current;
-
-        const handleMove = (e: MouseEvent) => {
-          const rect = btn.getBoundingClientRect();
-          const centerX = rect.left + rect.width / 2;
-          const centerY = rect.top + rect.height / 2;
-          const distX = e.clientX - centerX;
-          const distY = e.clientY - centerY;
-          const distance = Math.sqrt(distX * distX + distY * distY);
-          const maxDist = 100;
-
-          if (distance < maxDist) {
-            // Non-linear magnetic pull with refined physics
-            const pull = Math.pow(1 - distance / maxDist, 2);
-            const x = distX * pull * 0.4;
-            const y = distY * pull * 0.4;
-            const scale = 1 + pull * 0.08;
-
-            gsap.to(btn, {
-              x,
-              y,
-              scale,
-              duration: 0.4,
-              ease: "power4.out"
-            });
-          }
-        };
-
-        const handleLeave = () => {
-          gsap.to(btn, {
-            x: 0,
-            y: 0,
-            scale: 1,
-            duration: 0.6,
-            ease: "elastic.out(1, 0.4)"
-          });
-        };
-
-        btn.addEventListener('mousemove', handleMove);
-        btn.addEventListener('mouseleave', handleLeave);
-      });
     };
 
     loadGSAP().then(runAnimations);
@@ -888,7 +824,6 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
       {/* Close Button */}
       {onClose && (
         <button
-          ref={closeBtnRef}
           onClick={onClose}
           aria-label="Close Animation Home"
           className="fixed top-8 right-8 z-[100] group w-12 h-12 flex items-center justify-center rounded-full glass-panel-deep hover:bg-white/10 transition-all duration-300 shadow-xl"
@@ -938,42 +873,21 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
           </p>
 
           {/* Interactive Prompt Bar - Enhanced & Bigger */}
-          <div className={`hero-element w-full max-w-[92%] sm:max-w-xl md:max-w-2xl lg:max-w-4xl relative group z-30 transition-all duration-700 ${isInputFocused ? 'scale-[1.01] sm:scale-[1.015]' : ''}`}>
-            {/* Multi-layer glow effect */}
-            <div className={`absolute -inset-2 rounded-3xl blur-2xl transition-opacity duration-700 ${isInputFocused ? 'opacity-40' : 'opacity-15 group-hover:opacity-25'}`} style={{ background: `linear-gradient(135deg, ${THEME.primary}66, ${THEME.secondary}66, ${THEME.accent}66)` }} />
-            <div className={`absolute -inset-0.5 rounded-3xl blur-md transition-opacity duration-500 ${isInputFocused ? 'opacity-30' : 'opacity-0'}`} style={{ background: `linear-gradient(90deg, ${THEME.secondary}44, ${THEME.primary}44)` }} />
+          <div className="hero-element w-full max-w-[92%] sm:max-w-xl md:max-w-2xl lg:max-w-4xl relative z-30">
+            <div className="absolute -inset-2 rounded-3xl blur-2xl opacity-10 pointer-events-none" style={{ background: `linear-gradient(135deg, ${THEME.primary}66, ${THEME.secondary}66, ${THEME.accent}66)` }} />
 
             {/* Main prompt container with grain texture */}
             <div className="prompt-bar relative flex flex-col md:flex-row items-center rounded-3xl shadow-2xl">
 
               {/* Background & Effects Container - Isolated for clipping */}
-              <div className={`absolute inset-0 rounded-3xl overflow-hidden border transition-all duration-500 pointer-events-none -z-10 bg-[#000000] ${isInputFocused ? 'border-white/20' : 'border-white/5'}`}>
+              <div className={`absolute inset-0 rounded-3xl overflow-hidden border pointer-events-none -z-10 bg-[#000000] ${isInputFocused ? 'border-white/20' : 'border-white/10'}`}>
                 {/* Grain texture overlay */}
                 <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'noise\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.9\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23noise)\'/%3E%3C/svg%3E")', backgroundSize: '128px 128px' }} />
-
-                {/* Neural scanning line animation */}
-                {isInputFocused && (
-                  <div className="neural-scan absolute inset-0 overflow-hidden rounded-3xl">
-                    <div className="scan-line" />
-                  </div>
-                )}
-
-                {/* Shimmer track that follows input */}
-                {isInputFocused && (
-                  <div
-                    className="absolute top-0 w-24 h-full opacity-30 blur-xl transition-all duration-100"
-                    style={{
-                      left: `${shimmerPosition}%`,
-                      transform: 'translateX(-50%)',
-                      background: `linear-gradient(90deg, transparent, ${THEME.accent}, transparent)`
-                    }}
-                  />
-                )}
               </div>
 
               {/* Input Area */}
               <div className="flex-grow w-full md:w-auto relative border-b md:border-b-0 md:border-r border-white/5 z-10">
-                <div className={`absolute left-4 top-1/2 -translate-y-1/2 transition-all duration-500 scale-110`} style={{ color: isInputFocused ? THEME.accent : THEME.text }}>
+                <div className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: isInputFocused ? THEME.accent : THEME.text }}>
                   <span className="material-symbols-outlined text-2xl">auto_awesome</span>
                 </div>
                 <input
@@ -1080,9 +994,8 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
                   )}
                 </div>
 
-                {/* Send Button - Refined Magnetic Interactive */}
+                {/* Send Button */}
                 <button
-                  ref={sendBtnRef}
                   onClick={handleSend}
                   disabled={!prompt && !isProcessing}
                   className={`h-10 sm:h-12 px-4 sm:px-6 md:px-8 rounded-xl font-semibold uppercase tracking-[0.15em] sm:tracking-[0.2em] text-[10px] sm:text-xs transition-all duration-500 flex items-center justify-center gap-1 sm:gap-2 flex-grow md:flex-grow-0 min-w-[100px] sm:min-w-[140px] font-['JetBrains_Mono'] ${isProcessing
@@ -1179,41 +1092,6 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
           backdrop-filter: blur(40px) saturate(150%);
           -webkit-backdrop-filter: blur(40px) saturate(150%);
           border: 1px solid rgba(255, 255, 255, 0.08);
-        }
-        
-        /* Neural Scanning Animation */
-        .neural-scan .scan-line {
-          position: absolute;
-          top: 0;
-          left: -100%;
-          width: 100%;
-          height: 100%;
-          background: linear-gradient(
-            90deg,
-            transparent 0%,
-            ${THEME.primary}08 40%,
-            ${THEME.primary}15 50%,
-            ${THEME.primary}08 60%,
-            transparent 100%
-          );
-          animation: neuralScan 3s ease-in-out infinite;
-        }
-        
-        @keyframes neuralScan {
-          0% {
-            left: -100%;
-            opacity: 0;
-          }
-          10% {
-            opacity: 1;
-          }
-          90% {
-            opacity: 1;
-          }
-          100% {
-            left: 100%;
-            opacity: 0;
-          }
         }
         
         /* Smooth animate-in classes */

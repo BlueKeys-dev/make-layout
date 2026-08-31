@@ -322,7 +322,7 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
     <div
       onMouseDown={(e) => !isEditing && onMouseDown(e, element.id)}
       onDoubleClick={handleDoubleClick}
-      className={`absolute cursor-move group transition-all duration-200 ${isSelected ? 'z-50' : ''
+      className={`absolute cursor-move group ${isSelected ? 'z-50' : ''
         }`}
       style={{
         left: element.x,

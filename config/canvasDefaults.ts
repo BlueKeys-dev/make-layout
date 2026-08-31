@@ -13,11 +13,11 @@ export const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
   height: CANVAS_PRESETS.A4.height,
   mode: 'page',
   presetName: 'A4',
-  isFlipbook: false,
+  isFlipbook: true,
   borderRadius: 0,
   backgroundColor: '#ffffff',
   bleed: 0,
-  showGuides: false,
+  showGuides: true,
   gridRows: 12,
   gridCols: 12,
   showGrid: false

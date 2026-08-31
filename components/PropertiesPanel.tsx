@@ -264,9 +264,9 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               </div>
               
               <div className="flex justify-between mb-3 rounded-lg p-1 bg-gray-100 dark:bg-black/20 border border-transparent dark:border-white/5">
-                  <AlignBtn icon={<AlignLeft size={14} />} onClick={() => handleStyleChange('textAlign', 'left')} active={selectedElement.textStyle?.textAlign === 'left'} />
-                  <AlignBtn icon={<AlignCenter size={14} />} onClick={() => handleStyleChange('textAlign', 'center')} active={selectedElement.textStyle?.textAlign === 'center'} />
-                  <AlignBtn icon={<AlignRight size={14} />} onClick={() => handleStyleChange('textAlign', 'right')} active={selectedElement.textStyle?.textAlign === 'right'} />
+                  <AlignBtn icon={<AlignLeft size={14} />} onClick={() => handleStyleChange('textAlign', 'left')} active={(selectedElement.textStyle?.textAlign || 'center') === 'left'} />
+                  <AlignBtn icon={<AlignCenter size={14} />} onClick={() => handleStyleChange('textAlign', 'center')} active={(selectedElement.textStyle?.textAlign || 'center') === 'center'} />
+                  <AlignBtn icon={<AlignRight size={14} />} onClick={() => handleStyleChange('textAlign', 'right')} active={(selectedElement.textStyle?.textAlign || 'center') === 'right'} />
                   <AlignBtn icon={<AlignJustify size={14} />} onClick={() => handleStyleChange('textAlign', 'justify')} active={selectedElement.textStyle?.textAlign === 'justify'} />
               </div>
 

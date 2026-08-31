@@ -27,7 +27,7 @@ export const TextElement: React.FC<TextElementProps> = ({ element, onUpdateEleme
       fontSize: element.textStyle.fontSize ? `${element.textStyle.fontSize}px` : undefined,
       fontWeight: element.textStyle.fontWeight || undefined,
       fontStyle: element.textStyle.fontStyle || undefined,
-      textAlign: element.textStyle.textAlign || undefined,
+      textAlign: element.textStyle.textAlign || 'center',
       color: element.textStyle.color || undefined,
       lineHeight: element.textStyle.lineHeight || 1.5,
       fontFamily: element.textStyle.fontFamily || 'Inter, sans-serif'
@@ -71,7 +71,8 @@ export const TextElement: React.FC<TextElementProps> = ({ element, onUpdateEleme
   return (
     <div
       ref={textRef}
-      className={`w-full h-full p-0 break-words outline-none ${
+      className={`w-full h-full p-0.5 break-words outline-none ${
+ 
         !isEditing ? 'cursor-move select-none' : 'cursor-text select-text bg-white/50 dark:bg-black/50'
       }`}
       style={getTextStyle()}

@@ -20,7 +20,10 @@ interface DragState {
 
 export const useCanvasInteraction = (
   elements: CanvasElement[],
-  setElements: (elements: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[])) => void,
+  setElements: (
+    elements: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[]),
+    shouldPush?: boolean
+  ) => void,
   scale: number = 1
 ) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -73,7 +76,7 @@ export const useCanvasInteraction = (
   }, [elements, selectedIds]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (mode === 'idle' || !dragState.current || selectedIds.length === 0) return;
+    if (!dragState.current || selectedIds.length === 0) return;
 
     const { startX, startY, originalElements, handle } = dragState.current;
     
@@ -157,25 +160,42 @@ export const useCanvasInteraction = (
           y: original.y + deltaY
         };
       }
-    }));
-  }, [mode, selectedIds, setElements, scale]);
+    }), false);
+  }, [selectedIds, setElements, scale]);
+
+  const commitDrag = useCallback(() => {
+    const drag = dragState.current;
+    if (!drag) {
+      setMode('idle');
+      return;
+    }
+    const ids = new Set(drag.originalElements.map(oe => oe.id));
+    dragState.current = null;
+    setMode('idle');
+    setElements(prev => prev.map(el => {
+      if (!ids.has(el.id)) return el;
+      return {
+        ...el,
+        x: Math.round(el.x),
+        y: Math.round(el.y),
+        w: Math.round(el.w),
+        h: Math.round(el.h),
+      };
+    }), true);
+  }, [setElements]);
 
   const handleMouseUp = useCallback(() => {
-    setMode('idle');
-    dragState.current = null;
-  }, []);
+    commitDrag();
+  }, [commitDrag]);
 
   // Global mouse up handler to catch releases outside the element
   useEffect(() => {
     const handleGlobalMouseUp = () => {
-      if (mode !== 'idle') {
-        setMode('idle');
-        dragState.current = null;
-      }
+      commitDrag();
     };
     window.addEventListener('mouseup', handleGlobalMouseUp);
     return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
-  }, [mode]);
+  }, [commitDrag]);
 
   return {
     selectedIds,
