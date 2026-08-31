@@ -147,6 +147,10 @@ export const DesignEditor = () => {
     const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; title: string; onConfirm: () => void } | null>(null);
 
     const canvasRef = useRef<HTMLDivElement>(null);
+    const scaleRef = useRef(scale);
+    const viewPosRef = useRef(viewPos);
+    scaleRef.current = scale;
+    viewPosRef.current = viewPos;
     const abortControllerRef = useRef<AbortController | null>(null);
     const activeDrawingIdRef = useRef<string | null>(null); // Track actively drawing path element
     const pointsBufferRef = useRef<number[][]>([]); // Buffer for high-frequency point collection
@@ -671,6 +675,28 @@ export const DesignEditor = () => {
         }
     }, [drawingPolygonVertices]);
 
+    const zoomTo = useCallback((nextScale: number, focusX: number, focusY: number) => {
+        const s = scaleRef.current;
+        const clamped = Math.min(Math.max(0.1, nextScale), 5);
+        if (clamped === s) return;
+        const k = clamped / s;
+        const prev = viewPosRef.current;
+        const nextPos = {
+            x: focusX - (focusX - prev.x) * k,
+            y: focusY - (focusY - prev.y) * k,
+        };
+        scaleRef.current = clamped;
+        viewPosRef.current = nextPos;
+        setScale(clamped);
+        setViewPos(nextPos);
+    }, []);
+
+    const setScaleFromCenter = useCallback((value: number | ((prev: number) => number)) => {
+        const s = scaleRef.current;
+        const next = typeof value === 'function' ? value(s) : value;
+        zoomTo(next, 0, 0);
+    }, [zoomTo]);
+
     useKeyboardShortcuts({
         selectedIds,
         setSelectedIds,
@@ -679,7 +705,7 @@ export const DesignEditor = () => {
         setActiveTool: onSetTool,
         setIsAddMenuOpen,
         initiatePlacement,
-        setScale,
+        setScale: setScaleFromCenter,
         deleteSelectedElement,
         undo,
         redo,
@@ -687,32 +713,35 @@ export const DesignEditor = () => {
         removeLastPolygonVertex
     });
 
-    // --- Wheel Handling (native event for passive: false support) ---
     useEffect(() => {
         const container = canvasRef.current?.parentElement;
         if (!container) return;
 
         const handleWheel = (e: WheelEvent) => {
             if (e.ctrlKey || e.metaKey) {
-                // Zoom - prevent default browser zoom
                 e.preventDefault();
-                const delta = -e.deltaY * 0.001;
-                setScale(s => Math.min(Math.max(0.1, s + delta), 5));
+                let dy = e.deltaY;
+                if (e.deltaMode === 1) dy *= 16;
+                else if (e.deltaMode === 2) dy *= 256;
+                const next = scaleRef.current * Math.exp(-dy * 0.0008);
+                const rect = container.getBoundingClientRect();
+                const focusX = e.clientX - (rect.left + rect.width / 2);
+                const focusY = e.clientY - (rect.top + rect.height / 2);
+                zoomTo(next, focusX, focusY);
             } else {
-                // Pan
-                const dx = e.deltaX;
-                const dy = e.deltaY;
-                setViewPos(prev => ({ x: prev.x - dx, y: prev.y - dy }));
+                setViewPos(prev => {
+                    const next = { x: prev.x - e.deltaX, y: prev.y - e.deltaY };
+                    viewPosRef.current = next;
+                    return next;
+                });
             }
         };
 
-        // Use passive: false to allow preventDefault() for zoom
         container.addEventListener('wheel', handleWheel, { passive: false });
-
         return () => {
             container.removeEventListener('wheel', handleWheel);
         };
-    }, []);
+    }, [zoomTo]);
 
     // --- Chat Handlers ---
     const addChatMessage = (role: 'user' | 'assistant' | 'system', content: string, layoutPlan?: LayoutPlan, imageSearchResults?: Array<{ id: string; url: string; thumbnail: string; alt: string; photographer: string }>) => {
@@ -1203,6 +1232,7 @@ export const DesignEditor = () => {
                     setPages={setPages}
                     setCurrentPage={setCurrentPage}
                     onShowPDFViewer={() => setShowPDFViewer(true)}
+                    stackVertical={!rightPanelCollapsed}
                 />
 
                 <CanvasStage
@@ -1233,7 +1263,7 @@ export const DesignEditor = () => {
                     setCurrentPage={setCurrentPage}
                     onAddPage={() => { setPages(p => [...p, []]); setCurrentPage(pages.length); }}
                     scale={scale}
-                    setScale={setScale}
+                    setScale={setScaleFromCenter}
                     onRecenter={() => setViewPos(idealViewPos)}
                 />
 
@@ -1269,7 +1299,7 @@ export const DesignEditor = () => {
                 setCollapsed={setRightPanelCollapsed}
             />
 
-            <div className="fixed top-2 left-4 z-50 flex flex-row gap-2">
+            <div className={`fixed top-2 left-4 z-50 flex gap-2 ${rightPanelCollapsed ? 'flex-row' : 'flex-col'}`}>
                 <button
                     onClick={toggleTheme}
                     className="w-10 h-10 rounded-full bg-surface-dark text-white flex items-center justify-center shadow-lg hover:bg-gray-800 transition-colors"

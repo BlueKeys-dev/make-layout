@@ -354,6 +354,8 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
         width: element.w,
         height: element.h,
         zIndex: element.zIndex,
+        transform: `rotate(${element.rotation ?? 0}deg)`,
+        transformOrigin: 'center center',
       }}
     >
       {/* Selection Border */}

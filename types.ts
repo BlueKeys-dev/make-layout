@@ -95,6 +95,7 @@ export type CanvasElement = {
   strokeWidth?: number;
   snapToBox?: boolean;
   locked?: boolean;
+  rotation?: number;
   
   // Text specific properties
   textStyle?: TextStyle;

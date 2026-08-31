@@ -149,18 +149,18 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
   };
 
   return (
-    <div className="absolute top-6 left-1/2 transform -translate-x-1/2 mt-14 z-20 bg-surface-light dark:bg-surface-dark shadow-floating dark:shadow-floating-dark rounded-xl p-2 flex items-center gap-3 border border-border-light dark:border-border-dark dark:border-2 transition-all">
+    <div className="absolute top-6 left-1/2 z-20 mt-14 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-border-light bg-surface-light p-1.5 shadow-floating transition-all dark:border-2 dark:border-border-dark dark:bg-surface-dark dark:shadow-floating-dark lg:max-w-none lg:flex-nowrap lg:justify-start lg:gap-3 lg:p-2">
 
       {/* Add Board */}
       <button
         onClick={onAddPage}
-        className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-primary text-white shadow-md hover:bg-primary-orange/90 transition-all font-semibold text-xs whitespace-nowrap"
+        className="flex items-center gap-1.5 rounded-lg bg-primary px-2 py-1.5 text-xs font-semibold text-white shadow-md transition-all hover:bg-primary-orange/90 lg:px-3 lg:py-2"
         title="Add New Board"
       >
         <Plus size={16} />
       </button>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Aspect Ratio Presets */}
       <div className="flex items-center gap-1 bg-gray-100 dark:bg-black/20 p-1 rounded-lg">
@@ -187,13 +187,13 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
         </button>
       </div>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Flipbook Toggle */}
       <button
         onClick={() => setConfig({ ...config, isFlipbook: !config.isFlipbook })}
         title="Flipbook"
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${config.isFlipbook
+        className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-semibold transition-all lg:px-3 ${config.isFlipbook
           ? 'bg-indigo-500/10 text-indigo-500 border border-indigo-500/20'
           : 'text-text-secondary-light dark:text-text-secondary-dark hover:bg-gray-100 dark:hover:bg-gray-800'
           }`}
@@ -202,7 +202,7 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
         <span className="hidden lg:inline">Flipbook</span>
       </button>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Guides & Bleed */}
       <div className="flex items-center gap-1">
@@ -227,7 +227,7 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
         </HoverTip>
       </div>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Grid Settings */}
       <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/20 p-1 rounded-lg">
@@ -269,10 +269,10 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
         )}
       </div>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Corner Smoothness */}
-      <div className="flex items-center gap-2 px-2">
+      <div className="flex items-center gap-1 px-1 lg:gap-2 lg:px-2">
         <span className="hidden text-[10px] uppercase font-bold text-text-secondary-dark lg:inline">Radius</span>
         <input
           type="range"
@@ -281,11 +281,11 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
           value={currentRadius}
           onChange={(e) => handleRadiusChange(parseInt(e.target.value))}
           title="Radius"
-          className="w-16 h-1 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary"
+          className="h-1 w-10 cursor-pointer appearance-none rounded-lg bg-gray-200 accent-primary lg:w-16 dark:bg-gray-700"
         />
       </div>
 
-      <div className="w-px h-6 bg-border-light dark:bg-border-dark"></div>
+      <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 
       {/* Color Selection */}
       <div className="flex items-center gap-1">
