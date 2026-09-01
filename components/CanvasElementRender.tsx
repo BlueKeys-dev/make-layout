@@ -91,6 +91,14 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
   };
 
   const renderContent = () => {
+    if (element.layoutSlot?.role === null) {
+      return (
+        <div className="flex h-full w-full items-center justify-center border border-dashed border-sky-400/80 bg-sky-400/5 text-center text-[10px] font-semibold uppercase tracking-wider text-sky-500/80">
+          {element.name}
+        </div>
+      );
+    }
+
     switch (element.type) {
       case 'text':
         return (
@@ -344,6 +352,7 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
 
   return (
     <div
+      data-layout-slot-empty={element.layoutSlot?.role === null ? 'true' : undefined}
       onMouseDown={(e) => !isEditing && onMouseDown(e, element.id)}
       onDoubleClick={handleDoubleClick}
       className={`absolute ${locked ? 'cursor-default' : 'cursor-move'} group ${isSelected ? 'z-50' : ''

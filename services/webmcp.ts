@@ -1,7 +1,7 @@
 import { CanvasToolExecutionContext, CanvasToolOutcome, executeCanvasTool } from './canvasToolEngine';
 import { CANVAS_TOOL_CATALOG, validateCanvasToolCatalog } from './canvasToolCatalog';
 
-interface ToolExecuteOptions { signal: AbortSignal }
+interface ToolExecuteOptions { signal?: AbortSignal }
 interface PageModelContext {
   registerTool(
     tool: {
@@ -33,10 +33,11 @@ const getModelContext = (): PageModelContext | undefined => {
   return documentContext ?? legacyContext;
 };
 
-const combineAbortSignals = (...signals: AbortSignal[]) => {
+const combineAbortSignals = (...signals: Array<AbortSignal | undefined>) => {
   const controller = new AbortController();
   const abort = (signal: AbortSignal) => controller.abort(signal.reason);
   for (const signal of signals) {
+    if (!signal) continue;
     if (signal.aborted) {
       abort(signal);
       break;
@@ -79,7 +80,7 @@ export const registerDesignTools = async (bridge: CanvasToolBridge, lifecycleCon
         description: entry.description,
         inputSchema: entry.inputSchema,
         annotations: entry.annotations,
-        execute: async (input, { signal: executionSignal }) => {
+        execute: async (input, { signal: executionSignal } = {}) => {
           const run = async () => {
             const signal = combineAbortSignals(executionSignal, lifecycleController.signal);
             signal.throwIfAborted();

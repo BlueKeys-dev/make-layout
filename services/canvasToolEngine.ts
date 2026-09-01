@@ -1,10 +1,16 @@
-import { CanvasConfig, CanvasElement, LayoutPlan, ShapeType } from '../types';
+import { CanvasConfig, CanvasElement, LayoutPlan, LayoutRole, ShapeType } from '../types';
 import { DiagramType, DIAGRAM_CONFIGS } from '../types/diagramTypes';
 import { richTextToPlainText, sanitizeMermaidSource, sanitizeRichText } from '../utils/contentSecurity';
 import { generateLayoutPlan, validateLayout } from './layout_maker';
 import { searchImages, ImageSearchResult } from './imageService';
 import { generateMindMapCode } from './mindMapService';
 import { CANVAS_TOOL_CATALOG, CanvasToolName } from './canvasToolCatalog';
+import {
+  assignLayoutSlotRole,
+  getLayoutTemplates,
+  instantiateLayoutTemplate,
+  LayoutTemplateError,
+} from './layoutTemplates';
 
 export interface CanvasToolExecutionContext {
   elements: CanvasElement[];
@@ -28,6 +34,8 @@ export interface CanvasToolEffects {
   diagramCode?: string;
   diagramType?: DiagramType;
   uiLocked?: boolean;
+  pageToAppend?: CanvasElement[];
+  elementReplacement?: CanvasElement;
 }
 
 export interface CanvasToolOutcome {
@@ -91,6 +99,13 @@ const compactElement = (element: CanvasElement) => {
   };
   if (element.rotation) summary.rotation = element.rotation;
   if (element.locked) summary.locked = true;
+  if (element.layoutSlot) {
+    summary.layoutSlot = {
+      templateId: element.layoutSlot.templateId.slice(0, 160),
+      templateSlotId: element.layoutSlot.templateSlotId.slice(0, 120),
+      role: element.layoutSlot.role,
+    };
+  }
   if (element.type === 'text') {
     const content = richTextToPlainText(element.content || '');
     summary.text = {
@@ -160,6 +175,7 @@ const elementSummary = (element: CanvasElement) => ({
   type: element.type,
   name: element.name,
   bounds: { x: element.x, y: element.y, width: element.w, height: element.h },
+  ...(element.layoutSlot ? { layoutSlot: element.layoutSlot } : {}),
 });
 
 export const executeCanvasTool = async (
@@ -239,6 +255,51 @@ export const executeCanvasTool = async (
       };
     }
 
+    if (tool === 'list_layout_templates') {
+      const { offset, limit } = readWindow(input);
+      const library = getLayoutTemplates();
+      const items = library.templates.slice(offset, offset + limit).map(template => ({
+        id: template.id,
+        name: template.name,
+        description: template.description,
+        orientation: template.orientation,
+        source: template.source,
+        slotCount: template.slots.length,
+      }));
+      return {
+        success: true,
+        tool,
+        message: `Read ${items.length} reusable layouts.`,
+        data: boundedPage({ total: library.templates.length, offset, warning: library.error }, items, offset),
+      };
+    }
+
+    if (tool === 'get_layout_template') {
+      const templateId = text(input.templateId, 'templateId', 160);
+      const library = getLayoutTemplates();
+      const template = library.templates.find(candidate => candidate.id === templateId);
+      if (!template) return fail(tool, 'UNKNOWN_TEMPLATE', `No layout template named "${templateId}" exists.`, 'templateId');
+      return {
+        success: true,
+        tool,
+        message: `Read ${template.name}.`,
+        data: {
+          id: template.id,
+          name: template.name,
+          description: template.description,
+          orientation: template.orientation,
+          source: template.source,
+          slotCount: template.slots.length,
+          slots: template.slots.map(templateSlot => ({
+            id: templateSlot.id,
+            name: templateSlot.name,
+            bounds: { x: templateSlot.x, y: templateSlot.y, width: templateSlot.w, height: templateSlot.h },
+          })),
+          warning: library.error,
+        },
+      };
+    }
+
     if (tool === 'set_ui_lock') {
       if (typeof input.locked !== 'boolean') return fail(tool, 'INVALID_INPUT', 'locked must be true or false.', 'locked');
       return {
@@ -285,6 +346,50 @@ export const executeCanvasTool = async (
 
     const expected = validateMutation(tool, input, context);
     if (typeof expected !== 'number') return expected;
+
+    if (tool === 'load_layout_template') {
+      const templateId = text(input.templateId, 'templateId', 160);
+      const library = getLayoutTemplates();
+      const template = library.templates.find(candidate => candidate.id === templateId);
+      if (!template) return fail(tool, 'UNKNOWN_TEMPLATE', `No layout template named "${templateId}" exists.`, 'templateId');
+      const width = context.canvasConfig.isFlipbook ? context.canvasConfig.width * 2 : context.canvasConfig.width;
+      const page = instantiateLayoutTemplate(template, { width, height: context.canvasConfig.height });
+      return {
+        success: true,
+        tool,
+        message: `Loaded ${template.name} as new page ${context.pageCount + 1}.`,
+        data: {
+          templateId: template.id,
+          pageIndex: context.pageCount,
+          slotCount: page.length,
+          slots: page.map(element => ({ elementId: element.id, name: element.name, templateSlotId: element.layoutSlot?.templateSlotId })),
+          warning: library.error,
+        },
+        effects: { expectedRevision: expected, pageToAppend: page },
+      };
+    }
+
+    if (tool === 'set_layout_slot_role') {
+      const elementId = text(input.elementId, 'elementId', 160);
+      const role = text(input.role, 'role', 20) as LayoutRole;
+      if (!['text', 'image', 'table', 'math', 'diagram'].includes(role)) {
+        return fail(tool, 'INVALID_INPUT', 'role must be text, image, table, math, or diagram.', 'role');
+      }
+      if (input.replaceContent !== undefined && typeof input.replaceContent !== 'boolean') {
+        return fail(tool, 'INVALID_INPUT', 'replaceContent must be true or false.', 'replaceContent');
+      }
+      const element = context.elements.find(candidate => candidate.id === elementId);
+      if (!element) return fail(tool, 'ELEMENT_NOT_FOUND', 'No matching slot element exists.', 'elementId');
+      if (!element.layoutSlot) return fail(tool, 'NOT_LAYOUT_SLOT', 'The matching element is not a layout slot.', 'elementId');
+      const replacement = assignLayoutSlotRole(element, role, input.replaceContent === true);
+      return {
+        success: true,
+        tool,
+        message: `Assigned ${role} to ${element.name}.`,
+        data: { element: elementSummary(replacement) },
+        effects: { expectedRevision: expected, elementReplacement: replacement },
+      };
+    }
 
     if (tool === 'add_element') {
       const elementType = text(input.elementType, 'elementType', 20) as 'text' | 'shape' | 'image';
@@ -404,6 +509,7 @@ export const executeCanvasTool = async (
   } catch (error: any) {
     if (error?.name === 'AbortError') throw error;
     console.error(`[CanvasTool:${tool}]`, error);
+    if (error instanceof LayoutTemplateError) return fail(tool, error.code, error.message);
     return fail(tool, 'INVALID_INPUT', error?.message || 'The tool could not complete.');
   }
 };

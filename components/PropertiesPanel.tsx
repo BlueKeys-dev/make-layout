@@ -21,7 +21,8 @@ import {
   Square,
   Magnet,
   Lock,
-  Unlock
+  Unlock,
+  PanelsTopLeft
 } from 'lucide-react';
 
 const AVAILABLE_FONTS = [
@@ -38,9 +39,10 @@ const AVAILABLE_FONTS = [
   'JetBrains Mono'
 ];
 import { NodeEditor } from './NodeEditor';
-import { CanvasElement } from '../types';
+import { CanvasElement, LayoutRole } from '../types';
 import { fitPointsToBox } from './ShapeLibrary';
 import { isElementLocked } from '../utils/elementRegistry';
+import { assignLayoutSlotRole, markElementAsLayoutSlot, unmarkLayoutSlot } from '../services/layoutTemplates';
 
 interface PropertiesPanelProps {
   selectedElement: CanvasElement | undefined;
@@ -77,6 +79,20 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
       });
     }
   };
+
+  const handleSlotRoleChange = (role: LayoutRole | null) => {
+    if (!selectedElement.layoutSlot) return;
+    const replacing = selectedElement.layoutSlot.role !== null && selectedElement.layoutSlot.role !== role;
+    if (replacing && !window.confirm('Changing this slot role will remove its current content. Continue?')) return;
+    onUpdateElements([selectedElement.id], (element) => (
+      element.layoutSlot ? assignLayoutSlotRole(element, role, replacing) : element
+    ));
+  };
+
+  const canMarkAsSlot = Boolean(selectedElement
+    && selectedElement.type === 'shape'
+    && (selectedElement.shapeType || 'rectangle') === 'rectangle'
+    && !selectedElement.layoutSlot);
 
   return (
     <aside 
@@ -179,6 +195,70 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <span className="ml-0.5 text-xs font-mono text-text-secondary-dark">°</span>
             </div>
           </div>
+
+          {(canMarkAsSlot || selectedElement.layoutSlot) && (
+            <div className="border-b border-border-light p-4 dark:border-border-dark">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="flex items-center gap-2 text-xs font-semibold text-text-primary-light dark:text-text-primary-dark">
+                  <PanelsTopLeft size={14} className="text-sky-500" />
+                  Layout Slot
+                </span>
+                {selectedElement.layoutSlot && (
+                  <span className="rounded bg-sky-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-500">Marked</span>
+                )}
+              </div>
+
+              {canMarkAsSlot ? (
+                <button
+                  type="button"
+                  onClick={() => onUpdateElements([selectedElement.id], element => markElementAsLayoutSlot(element))}
+                  className="w-full rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs font-semibold text-sky-600 hover:bg-sky-500/15 dark:text-sky-400"
+                >
+                  Mark rectangle as slot
+                </button>
+              ) : selectedElement.layoutSlot ? (
+                <div className="space-y-3">
+                  <label className="block">
+                    <span className="mb-1 block text-[10px] text-text-secondary-dark">Slot name</span>
+                    <input
+                      value={selectedElement.name}
+                      maxLength={120}
+                      onChange={event => onUpdateElements([selectedElement.id], { name: event.target.value })}
+                      className="w-full rounded-lg border border-transparent bg-gray-50 px-2 py-2 text-xs text-text-primary-light outline-none focus:border-primary dark:bg-black/20 dark:text-text-primary-dark"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-1 block text-[10px] text-text-secondary-dark">Content role</span>
+                    <select
+                      value={selectedElement.layoutSlot.role || ''}
+                      onChange={event => handleSlotRoleChange((event.target.value || null) as LayoutRole | null)}
+                      className="w-full rounded-lg border border-transparent bg-gray-50 px-2 py-2 text-xs text-text-primary-light outline-none focus:border-primary dark:bg-black/20 dark:text-text-primary-dark"
+                    >
+                      <option value="">Empty slot</option>
+                      <option value="text">Text</option>
+                      <option value="image">Image</option>
+                      <option value="table">Table</option>
+                      <option value="math">Math</option>
+                      <option value="diagram">Mind map / diagram</option>
+                    </select>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const filled = selectedElement.layoutSlot?.role !== null;
+                      if (filled && !window.confirm('Removing this slot marker will remove its current content. Continue?')) return;
+                      onUpdateElements([selectedElement.id], element => unmarkLayoutSlot(element, filled));
+                    }}
+                    className="text-[10px] font-semibold text-red-500 hover:text-red-600"
+                  >
+                    Remove slot marker
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
 
 
           {/* Table Settings */}

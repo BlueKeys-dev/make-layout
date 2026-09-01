@@ -42,6 +42,9 @@ const captureCanvas = async (element: HTMLElement, config: Partial<CanvasConfig>
           }
       });
 
+      // Empty layout slots are editor guides, not exported artwork.
+      doc.querySelectorAll('[data-layout-slot-empty="true"]').forEach((slot) => slot.remove());
+
       // 4. Optimize Text Rendering Quality
       const textElements = doc.querySelectorAll('*');
       textElements.forEach((node) => {

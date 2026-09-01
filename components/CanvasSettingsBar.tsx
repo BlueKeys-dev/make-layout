@@ -7,10 +7,12 @@ import {
   Grid3X3,
   Printer,
   Plus,
-  Layers
+  Layers,
+  PanelsTopLeft
 } from 'lucide-react';
-import { CanvasConfig, CanvasElement, BoardConfig } from '../types';
+import { CanvasConfig, CanvasElement, BoardConfig, LayoutOrientation, LayoutTemplate as LayoutTemplateData } from '../types';
 import { CANVAS_PRESETS } from '../config/canvasDefaults';
+import { LayoutLibrary } from './LayoutLibrary';
 
 interface CanvasSettingsBarProps {
   config: CanvasConfig;
@@ -20,6 +22,12 @@ interface CanvasSettingsBarProps {
   activeBoard: CanvasElement | null;
   selectedIds: string[];
   onUpdateBoards: (ids: string[], updates: Partial<CanvasElement> | ((el: CanvasElement) => CanvasElement)) => void;
+  layoutTemplates: LayoutTemplateData[];
+  layoutOrientation: LayoutOrientation;
+  layoutError: string | null;
+  onLoadLayout: (template: LayoutTemplateData) => boolean;
+  onSaveLayout: (name: string) => boolean;
+  onDeleteLayout: (templateId: string) => void;
 }
 
 export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
@@ -29,8 +37,15 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
   selectedBoardId,
   activeBoard,
   selectedIds,
-  onUpdateBoards
+  onUpdateBoards,
+  layoutTemplates,
+  layoutOrientation,
+  layoutError,
+  onLoadLayout,
+  onSaveLayout,
+  onDeleteLayout,
 }) => {
+  const [showLayoutLibrary, setShowLayoutLibrary] = React.useState(false);
 
   // Get current values from active board or global config
   const currentBg = activeBoard?.boardConfig?.backgroundColor ?? activeBoard?.color ?? config.backgroundColor;
@@ -159,6 +174,28 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
       >
         <Plus size={16} />
       </button>
+
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setShowLayoutLibrary(open => !open)}
+          className={`rounded-lg p-1.5 transition-colors ${showLayoutLibrary ? 'bg-primary/15 text-primary' : 'text-text-secondary-light hover:bg-gray-100 dark:text-text-secondary-dark dark:hover:bg-gray-800'}`}
+          title="Load or save reusable layouts"
+        >
+          <PanelsTopLeft size={17} />
+        </button>
+        {showLayoutLibrary && (
+          <LayoutLibrary
+            templates={layoutTemplates}
+            currentOrientation={layoutOrientation}
+            error={layoutError}
+            onClose={() => setShowLayoutLibrary(false)}
+            onLoad={onLoadLayout}
+            onSave={onSaveLayout}
+            onDelete={onDeleteLayout}
+          />
+        )}
+      </div>
 
       <div className="hidden h-6 w-px bg-border-light dark:bg-border-dark lg:block"></div>
 

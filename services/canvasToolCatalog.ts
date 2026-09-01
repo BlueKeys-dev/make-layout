@@ -5,6 +5,10 @@ export type CanvasToolName =
   | 'describe_tools'
   | 'get_canvas_text'
   | 'capture_canvas'
+  | 'list_layout_templates'
+  | 'get_layout_template'
+  | 'load_layout_template'
+  | 'set_layout_slot_role'
   | 'set_ui_lock'
   | 'search_internet_images'
   | 'add_element'
@@ -91,6 +95,66 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
     },
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     chatCallable: true,
+  },
+  {
+    name: 'list_layout_templates',
+    title: 'List reusable layouts',
+    description: 'Lists built-in and locally saved layout templates with orientation and slot-count summaries. Use get_layout_template before loading a candidate.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        offset: { type: 'integer', minimum: 0, default: 0, description: 'Zero-based template offset.' },
+        limit: { type: 'integer', minimum: 1, maximum: 10, default: 5, description: 'Maximum templates returned.' },
+      },
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  },
+  {
+    name: 'get_layout_template',
+    title: 'Inspect reusable layout',
+    description: 'Returns normalized slot geometry for one reusable layout template without changing the canvas.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['templateId'],
+      properties: {
+        templateId: { type: 'string', minLength: 1, maxLength: 160, description: 'Template id returned by list_layout_templates.' },
+      },
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: false },
+  },
+  {
+    name: 'load_layout_template',
+    title: 'Load reusable layout',
+    description: 'Appends a new page containing empty slots from a compatible template. Requires the UI lock and current revision; existing pages are preserved.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['templateId', 'expectedRevision'],
+      properties: {
+        templateId: { type: 'string', minLength: 1, maxLength: 160, description: 'Template id returned by list_layout_templates.' },
+        expectedRevision,
+      },
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+  },
+  {
+    name: 'set_layout_slot_role',
+    title: 'Assign layout slot role',
+    description: 'Assigns text, image, table, math, or diagram content to a loaded layout slot while preserving its id and bounds. Set replaceContent only after the human explicitly approves replacing an assigned role.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['elementId', 'role', 'expectedRevision'],
+      properties: {
+        elementId: { type: 'string', minLength: 1, maxLength: 160, description: 'Slot element id returned by capture_canvas.' },
+        role: { type: 'string', enum: ['text', 'image', 'table', 'math', 'diagram'], description: 'Content role to assign.' },
+        replaceContent: { type: 'boolean', default: false, description: 'True only after explicit human approval to discard the current slot content.' },
+        expectedRevision,
+      },
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
   },
   {
     name: 'set_ui_lock',

@@ -1,4 +1,4 @@
-import { CanvasElement, ElementType } from '../types';
+import type { CanvasElement, ElementType } from '../types';
 
 /**
  * Element Registry & Factory

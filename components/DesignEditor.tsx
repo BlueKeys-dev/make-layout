@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
 import { Moon, Sun, Crosshair, Trash2, BookOpen, AlertTriangle, X, Info, LockKeyhole, Unlock } from 'lucide-react';
-import { CanvasElement, ElementType, CanvasConfig, ChatMessage, LayoutPlan, AIModelId } from '../types';
+import { CanvasElement, ElementType, CanvasConfig, ChatMessage, LayoutPlan, AIModelId, LayoutTemplate } from '../types';
 import { INITIAL_ELEMENTS } from '../data';
 import { SECTIONS } from '../data';
 import { DEFAULT_CANVAS_CONFIG, getEffectiveDimensions, getSafeZones } from '../config/canvasDefaults';
@@ -29,6 +29,14 @@ import { ShapeType } from '../types';
 import { CanvasToolOutcome } from '../services/canvasToolEngine';
 import { CanvasToolName } from '../services/canvasToolCatalog';
 import { registerDesignTools } from '../services/webmcp';
+import {
+    createUserLayoutTemplate,
+    deleteUserLayoutTemplate,
+    getLayoutTemplates,
+    instantiateLayoutTemplate,
+    loadUserLayoutTemplates,
+    storeUserLayoutTemplates,
+} from '../services/layoutTemplates';
 
 type Bounds = { x: number; y: number; w: number; h: number };
 
@@ -96,7 +104,8 @@ export const DesignEditor = () => {
     }, [pages]);
 
     const [currentPage, setCurrentPage] = useState(0);
-    const elements = pages[currentPage];
+    const elements = pages[currentPage] ?? pages[pages.length - 1] ?? [];
+    const [layoutLibrary, setLayoutLibrary] = useState(() => getLayoutTemplates());
 
     // Helper: Update elements for current page
     const setElements = useCallback((
@@ -147,7 +156,7 @@ export const DesignEditor = () => {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [activeModelId, setActiveModelId] = useState<AIModelId>(getDefaultModel().id);
     const [pendingPlan, setPendingPlan] = useState<LayoutPlan | null>(null);
-    const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; title: string; onConfirm: () => void; onCancel?: () => void } | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; title: string; confirmLabel?: string; onConfirm: () => void; onCancel?: () => void } | null>(null);
     const [isUiLocked, setIsUiLocked] = useState(false);
 
     const canvasRef = useRef<HTMLDivElement>(null);
@@ -169,12 +178,13 @@ export const DesignEditor = () => {
     const activeBoardIdRef = useRef<string | null>(null);
     const uiLockedRef = useRef(false);
     const canvasRevisionRef = useRef(0);
-    const previousCanvasRef = useRef({ pages, currentPage });
+    const previousCanvasRef = useRef({ pages, currentPage, canvasConfig });
     const webMcpRegistrationEpochRef = useRef(0);
     const applyCanvasToolOutcomeRef = useRef<((outcome: CanvasToolOutcome, signal: AbortSignal, announce: boolean) => Promise<{ success: boolean; revision: number; error?: { code: string; message: string } }>) | undefined>(undefined);
     const marqueeRectRef = useRef<Bounds | null>(null);
     const [marqueeRect, setMarqueeRect] = useState<Bounds | null>(null);
     const { width: logicalWidth, height: logicalHeight } = getEffectiveDimensions(canvasConfig);
+    const layoutOrientation = logicalWidth === logicalHeight ? 'square' : logicalWidth > logicalHeight ? 'landscape' : 'portrait';
 
     // -- Interaction Hooks --
     const {
@@ -187,6 +197,59 @@ export const DesignEditor = () => {
 
     const selectedElement = elements.find(e => selectedIds.includes(e.id));
     const isSelected = (id: string) => selectedIds.includes(id);
+
+    const refreshLayoutLibrary = useCallback((error: string | null = null) => {
+        try {
+            const next = getLayoutTemplates();
+            setLayoutLibrary({ templates: next.templates, error: error || next.error });
+        } catch (refreshError: any) {
+            console.error('[Layouts] Failed to refresh layout library:', refreshError);
+            setLayoutLibrary(previous => ({ ...previous, error: error || 'Saved layouts could not be refreshed.' }));
+        }
+    }, []);
+
+    const handleLoadLayoutTemplate = useCallback((template: LayoutTemplate) => {
+        try {
+            const newPage = instantiateLayoutTemplate(template, { width: logicalWidth, height: logicalHeight });
+            const newPageIndex = pageCountRef.current;
+            setPages(previous => [...previous, newPage]);
+            setCurrentPage(newPageIndex);
+            setSelectedIds([]);
+            setSelectedBoardId('primary');
+            setActiveTool('select');
+            setLayoutLibrary(previous => ({ ...previous, error: null }));
+            return true;
+        } catch (loadError: any) {
+            console.error('[Layouts] Failed to load layout:', loadError);
+            setLayoutLibrary(previous => ({ ...previous, error: loadError?.message || 'Layout could not be loaded.' }));
+            return false;
+        }
+    }, [logicalHeight, logicalWidth, setPages, setSelectedIds]);
+
+    const handleSaveLayoutTemplate = useCallback((name: string) => {
+        try {
+            const template = createUserLayoutTemplate(name, elementsRef.current, { width: logicalWidth, height: logicalHeight });
+            const saved = loadUserLayoutTemplates();
+            storeUserLayoutTemplates([...saved.templates, template]);
+            refreshLayoutLibrary(saved.error);
+            return true;
+        } catch (saveError: any) {
+            console.error('[Layouts] Failed to save layout:', saveError);
+            setLayoutLibrary(previous => ({ ...previous, error: saveError?.message || 'Layout could not be saved.' }));
+            return false;
+        }
+    }, [logicalHeight, logicalWidth, refreshLayoutLibrary]);
+
+    const handleDeleteLayoutTemplate = useCallback((templateId: string) => {
+        if (!window.confirm('Delete this saved layout?')) return;
+        try {
+            deleteUserLayoutTemplate(templateId);
+            refreshLayoutLibrary();
+        } catch (deleteError: any) {
+            console.error('[Layouts] Failed to delete layout:', deleteError);
+            setLayoutLibrary(previous => ({ ...previous, error: deleteError?.message || 'Layout could not be deleted.' }));
+        }
+    }, [refreshLayoutLibrary]);
 
     // -- Board Selection State --
     const [selectedBoardId, setSelectedBoardId] = useState<string | 'primary'>('primary');
@@ -215,11 +278,15 @@ export const DesignEditor = () => {
     uiLockedRef.current = isUiLocked;
 
     useLayoutEffect(() => {
-        if (previousCanvasRef.current.pages !== pages || previousCanvasRef.current.currentPage !== currentPage) {
+        if (
+            previousCanvasRef.current.pages !== pages
+            || previousCanvasRef.current.currentPage !== currentPage
+            || previousCanvasRef.current.canvasConfig !== canvasConfig
+        ) {
             canvasRevisionRef.current += 1;
-            previousCanvasRef.current = { pages, currentPage };
+            previousCanvasRef.current = { pages, currentPage, canvasConfig };
         }
-    }, [pages, currentPage]);
+    }, [pages, currentPage, canvasConfig]);
 
     useEffect(() => {
         if (!isUiLocked) return;
@@ -729,6 +796,24 @@ export const DesignEditor = () => {
         zoomTo(next, 0, 0);
     }, [zoomTo]);
 
+    const handleUndo = useCallback(() => {
+        const restoredPages = undo();
+        if (!restoredPages) return;
+        setCurrentPage(index => Math.min(index, Math.max(0, restoredPages.length - 1)));
+        setSelectedIds([]);
+        setSelectedBoardId('primary');
+    }, [setSelectedIds, undo]);
+
+    const handleRedo = useCallback(() => {
+        const restoredPages = redo();
+        if (!restoredPages) return;
+        setCurrentPage(index => restoredPages.length > pageCountRef.current
+            ? restoredPages.length - 1
+            : Math.min(index, Math.max(0, restoredPages.length - 1)));
+        setSelectedIds([]);
+        setSelectedBoardId('primary');
+    }, [redo, setSelectedIds]);
+
     useKeyboardShortcuts({
         enabled: !isUiLocked,
         selectedIds,
@@ -740,8 +825,8 @@ export const DesignEditor = () => {
         initiatePlacement,
         setScale: setScaleFromCenter,
         deleteSelectedElement,
-        undo,
-        redo,
+        undo: handleUndo,
+        redo: handleRedo,
         activeTool,
         removeLastPolygonVertex
     });
@@ -790,7 +875,7 @@ export const DesignEditor = () => {
         setChatMessages(prev => [...prev, newMessage]);
     }, [activeModelId]);
 
-    const requestConfirmation = useCallback((title: string, signal: AbortSignal) => new Promise<boolean>((resolve) => {
+    const requestConfirmation = useCallback((title: string, signal: AbortSignal, confirmLabel = 'Yes, Delete Permanently') => new Promise<boolean>((resolve) => {
         if (signal.aborted) {
             resolve(false);
             return;
@@ -811,6 +896,7 @@ export const DesignEditor = () => {
         setConfirmDelete({
             isOpen: true,
             title,
+            confirmLabel,
             onConfirm: () => finish(true),
             onCancel: () => finish(false),
         });
@@ -863,6 +949,46 @@ export const DesignEditor = () => {
             setSelectedIds([element.id]);
         }
 
+        if (effects.pageToAppend) {
+            const newPageIndex = pageCountRef.current;
+            setPages(previous => [...previous, effects.pageToAppend as CanvasElement[]]);
+            setCurrentPage(newPageIndex);
+            setSelectedIds([]);
+            setSelectedBoardId('primary');
+            setActiveTool('select');
+        }
+
+        if (effects.elementReplacement) {
+            const replacement = effects.elementReplacement;
+            const currentElement = elementsRef.current.find(element => element.id === replacement.id);
+            if (!currentElement) {
+                return { success: false, revision: canvasRevisionRef.current, error: { code: 'ELEMENT_NOT_FOUND', message: 'The layout slot no longer exists.' } };
+            }
+            const replacesFilledSlot = announce
+                && currentElement.layoutSlot?.role !== null
+                && currentElement.layoutSlot?.role !== replacement.layoutSlot?.role;
+            if (replacesFilledSlot) {
+                if (confirmDelete?.isOpen) {
+                    return { success: false, revision: canvasRevisionRef.current, error: { code: 'CONFIRMATION_BUSY', message: 'Another confirmation is already open.' } };
+                }
+                const confirmed = await requestConfirmation(
+                    `Replace the current ${currentElement.layoutSlot?.role} content in "${currentElement.name}" with ${replacement.layoutSlot?.role}?`,
+                    signal,
+                    'Yes, Replace Content',
+                );
+                signal.throwIfAborted();
+                if (!confirmed) return { success: false, revision: canvasRevisionRef.current, error: { code: 'USER_CANCELLED', message: 'The user cancelled or did not confirm slot replacement.' } };
+                if (!uiLockedRef.current) {
+                    return { success: false, revision: canvasRevisionRef.current, error: { code: 'UI_NOT_LOCKED', message: 'The UI lock expired or was released while confirmation was open.' } };
+                }
+                if (expectedRevision !== canvasRevisionRef.current) {
+                    return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: 'The canvas changed while confirmation was open.' } };
+                }
+            }
+            setElements(previous => previous.map(element => element.id === replacement.id ? replacement : element));
+            setSelectedIds([replacement.id]);
+        }
+
         if (effects.diagramCode) {
             const centerX = -viewPosRef.current.x + (window.innerWidth / 2) / scaleRef.current;
             const centerY = -viewPosRef.current.y + (window.innerHeight / 2) / scaleRef.current;
@@ -905,7 +1031,7 @@ export const DesignEditor = () => {
         });
 
         return { success: true, revision: canvasRevisionRef.current };
-    }, [activeBoard, addChatMessage, confirmDelete?.isOpen, requestConfirmation, setElements, setSelectedIds]);
+    }, [activeBoard, addChatMessage, confirmDelete?.isOpen, requestConfirmation, setElements, setPages, setSelectedIds]);
 
     applyCanvasToolOutcomeRef.current = applyCanvasToolOutcome;
 
@@ -1272,7 +1398,7 @@ export const DesignEditor = () => {
                                     onClick={confirmDelete.onConfirm}
                                     className="w-full py-4 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold text-lg transition-all shadow-lg shadow-red-500/20 active:scale-[0.98]"
                                 >
-                                    Yes, Delete Permanently
+                                    {confirmDelete.confirmLabel || 'Yes, Delete Permanently'}
                                 </button>
                                 <button
                                     onClick={() => { confirmDelete.onCancel?.(); setConfirmDelete(null); }}
@@ -1335,6 +1461,12 @@ export const DesignEditor = () => {
                                 return { ...el, ...updates };
                             }));
                         }}
+                        layoutTemplates={layoutLibrary.templates}
+                        layoutOrientation={layoutOrientation}
+                        layoutError={layoutLibrary.error}
+                        onLoadLayout={handleLoadLayoutTemplate}
+                        onSaveLayout={handleSaveLayoutTemplate}
+                        onDeleteLayout={handleDeleteLayoutTemplate}
                         onAddPage={() => {
                             // Find right-most boundary
                             const maxX = elements.length > 0 ? Math.max(...elements.map(e => e.x + e.w)) : 0;

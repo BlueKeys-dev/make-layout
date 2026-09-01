@@ -9,6 +9,35 @@ export type Section = {
 
 export type ElementType = 'text' | 'image' | 'shape' | 'path' | 'table' | 'mindmap' | 'geogebra' | 'figure' | 'container' | 'math' | 'p5';
 
+export type LayoutRole = 'text' | 'image' | 'table' | 'math' | 'diagram';
+
+export type LayoutOrientation = 'portrait' | 'landscape' | 'square';
+
+export type LayoutSlotMetadata = {
+  templateId: string;
+  templateSlotId: string;
+  role: LayoutRole | null;
+};
+
+export type LayoutTemplateSlot = {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+export type LayoutTemplate = {
+  schemaVersion: 1;
+  id: string;
+  name: string;
+  description: string;
+  orientation: LayoutOrientation;
+  source: 'built-in' | 'user';
+  slots: LayoutTemplateSlot[];
+};
+
 export type ShapeType = 
   | 'rectangle' | 'square' | 'circle' | 'triangle' | 'star' | 'polygon' 
   // Standard Geometric
@@ -113,6 +142,9 @@ export type CanvasElement = {
 
   // P5.js animation data
   p5Data?: P5Data;
+
+  // Persistent metadata for reusable layout slots.
+  layoutSlot?: LayoutSlotMetadata;
 
   // Transient state
   justCreated?: boolean;
