@@ -513,7 +513,7 @@ export const executeCanvasTool = async (
       const result = await generateMindMapCode(prompt, requestedType, 3, signal);
       signal?.throwIfAborted();
       const diagramCode = sanitizeMermaidSource(result.code);
-      const typeLabel = DIAGRAM_CONFIGS[result.type]?.label || result.type;
+      const typeLabel = result.type === 'auto' ? result.type : (DIAGRAM_CONFIGS[result.type]?.label || result.type);
       return {
         success: true, tool, message: `Generated ${typeLabel}.`,
         data: { diagramType: result.type, sourceLength: diagramCode.length },

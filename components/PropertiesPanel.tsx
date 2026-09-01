@@ -81,7 +81,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
   };
 
   const handleSlotRoleChange = (role: LayoutRole | null) => {
-    if (!selectedElement.layoutSlot) return;
+    if (!selectedElement?.layoutSlot) return;
     const replacing = selectedElement.layoutSlot.role !== null && selectedElement.layoutSlot.role !== role;
     if (replacing && !window.confirm('Changing this slot role will remove its current content. Continue?')) return;
     onUpdateElements([selectedElement.id], (element) => (

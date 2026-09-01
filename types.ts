@@ -191,7 +191,7 @@ export type ChatMessage = {
   timestamp: number;
   modelId?: AIModelId;
   layoutPlan?: LayoutPlan; // Attached if AI proposes a layout
-  imageSearchResults?: Array<{ id: string; url: string; thumbnail: string; alt: string; photographer: string }>; // Image search results
+  imageSearchResults?: Array<{ id: string; url: string; thumbnail: string; alt: string; photographer: string; photographerUrl: string }>; // Image search results
 };
 
 export type LayoutPlanElement = {

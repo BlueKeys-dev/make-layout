@@ -73,7 +73,7 @@ export interface ChatResponse {
   elementToAdd?: Partial<CanvasElement>;
   elementToRemove?: { id: string };
   removalReason?: string;
-  imageSearchResults?: Array<{ id: string; url: string; thumbnail: string; alt: string; photographer: string }>;
+  imageSearchResults?: Array<{ id: string; url: string; thumbnail: string; alt: string; photographer: string; photographerUrl: string }>;
   mindMapCode?: string;
 }
 

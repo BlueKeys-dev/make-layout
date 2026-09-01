@@ -4,8 +4,10 @@ import { getEffectiveDimensions, getSafeZones } from '../../config/canvasDefault
 import { CanvasElementRender } from '../CanvasElementRender';
 import { getElementDefaultSize } from '../../utils/elementRegistry';
 
+type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se';
+
 interface CanvasStageProps {
-  canvasRef: React.RefObject<HTMLDivElement>;
+  canvasRef: React.RefObject<HTMLDivElement | null>;
   canvasConfig: CanvasConfig;
   scale: number;
   elements: CanvasElement[];
@@ -19,7 +21,7 @@ interface CanvasStageProps {
   onMouseDown: (e: React.MouseEvent) => void;
   onElementDragStart: (e: React.MouseEvent, id: string) => void;
   setElements: (callback: (prev: CanvasElement[]) => CanvasElement[]) => void;
-  onResizeStart: (e: React.MouseEvent, id: string, handle: string) => void;
+  onResizeStart: (e: React.MouseEvent, id: string, handle?: ResizeHandle) => void;
   viewPos?: { x: number; y: number };
   drawingPolygonVertices?: { x: number, y: number }[];
   polygonPreviewMousePos?: { x: number, y: number } | null;

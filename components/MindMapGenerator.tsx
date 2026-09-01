@@ -230,7 +230,7 @@ export const MindMapGenerator: React.FC<MindMapGeneratorProps> = ({ onClose, onI
             </div>
 
             {/* Prompt Section */}
-            <div className="p-6 border-b border-white/20 dark:border-white/5 space-y-4 flex-1 overflow-auto">
+            <div className="p-6 border-b border-white/20 dark:border-white/5 space-y-4 flex-1 overflow-auto [scrollbar-gutter:stable]">
               <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                 Describe your diagram
               </label>
@@ -273,7 +273,7 @@ export const MindMapGenerator: React.FC<MindMapGeneratorProps> = ({ onClose, onI
           <div className="flex-1 bg-white/5 dark:bg-black/5 relative flex flex-col">
             <div className="absolute inset-0 bg-[radial-gradient(rgba(0,0,0,0.05)_1px,transparent_1px)] dark:bg-[radial-gradient(rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:24px_24px] pointer-events-none" />
 
-            <div className="flex-1 overflow-auto flex items-center justify-center p-8 custom-scrollbar">
+            <div className="flex-1 overflow-auto flex items-center justify-center p-8 custom-scrollbar [scrollbar-gutter:stable]">
               <div ref={previewRef} className="w-full h-full flex items-center justify-center [&>svg]:max-w-full [&>svg]:max-h-full [&>svg]:drop-shadow-xl" />
             </div>
 

@@ -281,7 +281,7 @@ export const DesignEditor = () => {
 
     // Get active board element (null if primary)
     const activeBoard = selectedBoardId !== 'primary'
-        ? elements.find(e => e.id === selectedBoardId)
+        ? elements.find(e => e.id === selectedBoardId) ?? null
         : null;
     const layoutTargetWidth = activeBoard?.w ?? logicalWidth;
     const layoutTargetHeight = activeBoard?.h ?? logicalHeight;
@@ -882,7 +882,7 @@ export const DesignEditor = () => {
     }, [zoomTo]);
 
     // --- Chat Handlers ---
-    const addChatMessage = useCallback((role: 'user' | 'assistant' | 'system', content: string, layoutPlan?: LayoutPlan, imageSearchResults?: Array<{ id: string; url: string; thumbnail: string; alt: string; photographer: string }>) => {
+    const addChatMessage = useCallback((role: 'user' | 'assistant' | 'system', content: string, layoutPlan?: LayoutPlan, imageSearchResults?: Array<{ id: string; url: string; thumbnail: string; alt: string; photographer: string; photographerUrl: string }>) => {
         const newMessage: ChatMessage = {
             id: crypto.randomUUID(),
             role: role as 'user' | 'assistant', // System usually mapped to assistant visually or handled

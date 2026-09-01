@@ -4,7 +4,7 @@ import { downloadAsPNG, downloadAsPDF, downloadAsPPTX, exportAsJSON } from '../.
 import { CanvasConfig, CanvasElement } from '../../types';
 
 interface EditorHeaderProps {
-  canvasRef: React.RefObject<HTMLDivElement>;
+  canvasRef: React.RefObject<HTMLDivElement | null>;
   canvasConfig: CanvasConfig;
   setCanvasConfig: (config: CanvasConfig) => void;
   pages: CanvasElement[][];

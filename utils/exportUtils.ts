@@ -3,11 +3,15 @@ import jsPDF from 'jspdf';
 import pptxgen from 'pptxgenjs';
 import { CanvasElement, CanvasConfig } from '../types';
 
+interface CaptureCanvasOptions {
+  backgroundColor?: string | null;
+}
+
 /**
  * Helper to capture high-quality canvas image
  * Includes optimizations for text rendering, dark mode, and transform normalization.
  */
-const captureCanvas = async (element: HTMLElement, config: Partial<CanvasConfig>) => {
+const captureCanvas = async (element: HTMLElement, options: CaptureCanvasOptions = {}) => {
   // Ensure fonts are fully loaded before capturing
   await document.fonts.ready;
 
@@ -18,7 +22,7 @@ const captureCanvas = async (element: HTMLElement, config: Partial<CanvasConfig>
     scale: 3, // High resolution (3x)
     useCORS: true,
     allowTaint: true,
-    backgroundColor: config.backgroundColor === null ? null : (config.backgroundColor || '#ffffff'),
+    backgroundColor: options.backgroundColor === null ? null : (options.backgroundColor ?? '#ffffff'),
     logging: false,
     onclone: (doc) => {
       // 1. Persist Dark Mode
@@ -65,7 +69,7 @@ const captureCanvas = async (element: HTMLElement, config: Partial<CanvasConfig>
  * Downloads the current canvas view as a PNG image.
  */
 export const downloadAsPNG = async (
-  canvasRef: React.RefObject<HTMLDivElement>,
+  canvasRef: React.RefObject<HTMLDivElement | null>,
   filename = 'design-export'
 ) => {
   if (!canvasRef.current) return;
@@ -86,7 +90,7 @@ export const downloadAsPNG = async (
  * Downloads the current canvas view as a PDF document.
  */
 export const downloadAsPDF = async (
-  canvasRef: React.RefObject<HTMLDivElement>,
+  canvasRef: React.RefObject<HTMLDivElement | null>,
   canvasConfig: CanvasConfig,
   filename = 'design-export'
 ) => {
@@ -102,7 +106,7 @@ export const downloadAsPDF = async (
       format: [width, height],
     });
 
-    const canvas = await captureCanvas(canvasRef.current, canvasConfig);
+    const canvas = await captureCanvas(canvasRef.current, { backgroundColor: canvasConfig.backgroundColor });
     const imgData = canvas.toDataURL('image/png');
     pdf.addImage(imgData, 'PNG', 0, 0, width, height);
     pdf.save(`${filename}.pdf`);
@@ -116,7 +120,7 @@ export const downloadAsPDF = async (
  * Downloads the current canvas view as a PowerPoint slide.
  */
 export const downloadAsPPTX = async (
-  canvasRef: React.RefObject<HTMLDivElement>,
+  canvasRef: React.RefObject<HTMLDivElement | null>,
   canvasConfig: CanvasConfig,
   filename = 'design-presentation'
 ) => {
@@ -131,7 +135,7 @@ export const downloadAsPPTX = async (
     pptx.layout = 'CUSTOM_LAYOUT';
 
     const slide = pptx.addSlide();
-    const canvas = await captureCanvas(canvasRef.current, canvasConfig);
+    const canvas = await captureCanvas(canvasRef.current, { backgroundColor: canvasConfig.backgroundColor });
     const imgData = canvas.toDataURL('image/png');
 
     slide.addImage({
