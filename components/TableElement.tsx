@@ -72,7 +72,7 @@ const convertToLatex = (content: string): string => {
 };
 
 // Component to render KaTeX content
-const MathCell: React.FC<{ content: string; className?: string }> = ({ content, className }) => {
+const MathCell: React.FC<{ content: string; className?: string; style?: React.CSSProperties }> = ({ content, className, style }) => {
     const ref = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -99,7 +99,7 @@ const MathCell: React.FC<{ content: string; className?: string }> = ({ content, 
         }
     }, [content]);
 
-    return <div ref={ref} className={className} />;
+    return <div ref={ref} className={className} style={style} />;
 };
 
 export const TableElement: React.FC<TableElementProps> = ({ element, onUpdateElement }) => {
@@ -146,25 +146,36 @@ export const TableElement: React.FC<TableElementProps> = ({ element, onUpdateEle
     const renderCellContent = (content: string, isHeader: boolean = false) => {
         if (!content) return null;
 
+        const style = textColor ? { color: textColor } : undefined;
+
         // Check if content looks like math
         if (isMathContent(content)) {
             return (
                 <MathCell
                     content={content}
                     className={`w-full h-full p-2 text-xs ${isHeader ? 'font-bold' : ''} flex items-center dark:text-gray-100`}
+                    style={style}
                 />
             );
         }
 
         return (
-            <div className={`w-full h-full p-2 text-xs ${isHeader ? 'font-bold' : ''} truncate dark:text-slate-200`}>
+            <div
+                className={`w-full h-full p-2 text-xs ${isHeader ? 'font-bold' : ''} truncate dark:text-slate-200`}
+                style={style}
+            >
                 {content}
             </div>
         );
     };
 
+    const textColor = element.tableData?.textColor;
+
     return (
-        <div className="w-full h-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 overflow-hidden select-none flex flex-col rounded-[24px] shadow-sm">
+        <div
+            className="w-full h-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 overflow-hidden select-none flex flex-col rounded-[24px] shadow-sm"
+            style={element.color && element.color !== 'transparent' ? { backgroundColor: element.color } : undefined}
+        >
             <div className="w-full h-full grid" style={{
                 gridTemplateColumns: `repeat(${cols}, 1fr)`,
                 gridTemplateRows: `auto repeat(${rows - 1}, 1fr)`
@@ -174,6 +185,7 @@ export const TableElement: React.FC<TableElementProps> = ({ element, onUpdateEle
                     <div
                         key={`h-${c}`}
                         className="bg-slate-100 dark:bg-slate-950 p-0 border-b border-r border-slate-200 dark:border-slate-700 last:border-r-0 flex items-center relative"
+                        style={element.color && element.color !== 'transparent' ? { backgroundColor: element.color } : undefined}
                         onDoubleClick={(e) => { e.stopPropagation(); setEditingCell({ r: 0, c }); }}
                     >
                         {editingCell?.r === 0 && editingCell.c === c ? (

@@ -129,7 +129,12 @@ const extractAndFixSvgDimensions = (svgString: string): { svg: string; width: nu
   // Add proper sizing attributes
   fixedSvg = fixedSvg.replace(
     /<svg([^>]*)>/,
-    `<svg$1 preserveAspectRatio="xMidYMid meet" style="overflow: visible; width: 100%; height: 100%;">`
+    (_match, attributes: string) => {
+      const cleanAttributes = attributes
+        .replace(/\s+preserveAspectRatio\s*=\s*(["']).*?\1/gi, '')
+        .replace(/\s+style\s*=\s*(["']).*?\1/gi, '');
+      return `<svg${cleanAttributes} preserveAspectRatio="xMidYMid meet" style="overflow: visible; width: 100%; height: 100%;">`;
+    }
   );
 
   return { svg: fixedSvg, width: Math.round(width), height: Math.round(height) };
@@ -466,10 +471,11 @@ export const MindMapElement: React.FC<MindMapElementProps> = React.memo(({ eleme
       // Check if this is a mindmap and try fallback
       const isMindmapError = mermaidSyntax.trim().toLowerCase().startsWith('mindmap');
 
-      if (isMindmapError && element.mermaidCode) {
+      if (isMindmapError) {
         // Try to render a fallback diagram
         try {
-          const fallbackCode = generateFallbackMindmap(element.mermaidCode, errorMsg);
+          const sourceCode = element.mermaidCode || mermaidSyntax;
+          const fallbackCode = generateFallbackMindmap(sourceCode, errorMsg);
           const fallbackId = `mermaid-fallback-${element.id}-${getRenderIdCounter()}`;
           const { svg: fallbackSvg } = await mermaid.render(fallbackId, fallbackCode);
 
@@ -482,7 +488,7 @@ export const MindMapElement: React.FC<MindMapElementProps> = React.memo(({ eleme
           lastRenderedCodeRef.current = fallbackCode;
 
           // Cache this fallback so we don't keep retrying the broken code
-          fallbackAppliedCache.set(element.mermaidCode, fallbackCode);
+          fallbackAppliedCache.set(sourceCode, fallbackCode);
 
           // Also add the fallback SVG to cache
           addToCache(fallbackCode, fixedFallback);

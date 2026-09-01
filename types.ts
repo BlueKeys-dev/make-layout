@@ -74,6 +74,7 @@ export type TableData = {
   cols: number;
   headers: string[];
   data: string[][];
+  textColor?: string;
 };
 
 export type MindMapNode = {

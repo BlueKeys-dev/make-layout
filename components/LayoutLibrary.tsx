@@ -32,7 +32,7 @@ export const LayoutLibrary: React.FC<LayoutLibraryProps> = ({
             Layouts
           </div>
           <p className="mt-0.5 text-[10px] text-text-secondary-light dark:text-text-secondary-dark">
-            Loading creates a new page and keeps the current page unchanged.
+            Loading adds slots to the selected board and preserves existing content.
           </p>
         </div>
         <button type="button" onClick={onClose} className="rounded-md p-1 text-text-secondary-dark hover:bg-black/5 dark:hover:bg-white/10" title="Close layouts">

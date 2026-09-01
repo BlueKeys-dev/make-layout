@@ -10,6 +10,7 @@ import { createElementFactory } from '../utils/elementRegistry.ts';
 export const LAYOUT_TEMPLATE_STORAGE_KEY = 'ai-layout-templates-v1';
 
 type CanvasSize = { width: number; height: number };
+type LayoutTargetBounds = CanvasSize & { x?: number; y?: number };
 
 export class LayoutTemplateError extends Error {
   readonly code: string;
@@ -184,16 +185,16 @@ export const validateLayoutTemplate = (value: unknown): LayoutTemplate => {
 const createEmptySlotElement = (
   template: LayoutTemplate,
   templateSlot: LayoutTemplateSlot,
-  size: CanvasSize,
+  target: LayoutTargetBounds,
   zIndex: number,
 ): CanvasElement => ({
   id: crypto.randomUUID(),
   type: 'shape',
   name: templateSlot.name,
-  x: templateSlot.x * size.width,
-  y: templateSlot.y * size.height,
-  w: templateSlot.w * size.width,
-  h: templateSlot.h * size.height,
+  x: (target.x ?? 0) + templateSlot.x * target.width,
+  y: (target.y ?? 0) + templateSlot.y * target.height,
+  w: templateSlot.w * target.width,
+  h: templateSlot.h * target.height,
   color: 'transparent',
   strokeColor: '#38bdf8',
   strokeWidth: 1,
@@ -207,16 +208,20 @@ const createEmptySlotElement = (
   },
 });
 
-export const instantiateLayoutTemplate = (templateValue: unknown, size: CanvasSize): CanvasElement[] => {
+export const instantiateLayoutTemplate = (
+  templateValue: unknown,
+  target: LayoutTargetBounds,
+  zIndexStart = 1,
+): CanvasElement[] => {
   const template = validateLayoutTemplate(templateValue);
-  const orientation = getLayoutOrientation(size);
+  const orientation = getLayoutOrientation(target);
   if (template.orientation !== orientation) {
     throw new LayoutTemplateError(
       'INCOMPATIBLE_CANVAS_ORIENTATION',
       `${template.name} is ${template.orientation}; switch the canvas to ${template.orientation} before loading it.`,
     );
   }
-  return template.slots.map((templateSlot, index) => createEmptySlotElement(template, templateSlot, size, index + 1));
+  return template.slots.map((templateSlot, index) => createEmptySlotElement(template, templateSlot, target, zIndexStart + index));
 };
 
 const roleToElementType = (role: LayoutRole) => role === 'diagram' ? 'mindmap' : role;
@@ -286,24 +291,30 @@ export const unmarkLayoutSlot = (element: CanvasElement, replaceContent = false)
 export const createUserLayoutTemplate = (
   name: string,
   elements: CanvasElement[],
-  size: CanvasSize,
+  target: LayoutTargetBounds,
 ): LayoutTemplate => {
-  const marked = elements.filter(element => element.layoutSlot);
+  const targetX = target.x ?? 0;
+  const targetY = target.y ?? 0;
+  const marked = elements.filter(element => element.layoutSlot
+    && element.x >= targetX
+    && element.y >= targetY
+    && element.x + element.w <= targetX + target.width
+    && element.y + element.h <= targetY + target.height);
   if (!marked.length) throw new LayoutTemplateError('MISSING_SLOTS', 'Mark at least one rectangle as a layout slot before saving.');
   const template: LayoutTemplate = {
     schemaVersion: 1,
     id: `user:${crypto.randomUUID()}`,
     name: boundedText(name, 'name', 120),
     description: `Saved layout with ${marked.length} slot${marked.length === 1 ? '' : 's'}.`,
-    orientation: getLayoutOrientation(size),
+    orientation: getLayoutOrientation(target),
     source: 'user',
     slots: marked.map((element, index) => ({
       id: `slot-${index + 1}`,
       name: element.name || `Slot ${index + 1}`,
-      x: element.x / size.width,
-      y: element.y / size.height,
-      w: element.w / size.width,
-      h: element.h / size.height,
+      x: (element.x - targetX) / target.width,
+      y: (element.y - targetY) / target.height,
+      w: element.w / target.width,
+      h: element.h / target.height,
     })),
   };
   return validateLayoutTemplate(template);

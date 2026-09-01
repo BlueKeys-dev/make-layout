@@ -34,7 +34,7 @@ export interface CanvasToolEffects {
   diagramCode?: string;
   diagramType?: DiagramType;
   uiLocked?: boolean;
-  pageToAppend?: CanvasElement[];
+  layoutElementsToAdd?: CanvasElement[];
   elementReplacement?: CanvasElement;
 }
 
@@ -352,20 +352,36 @@ export const executeCanvasTool = async (
       const library = getLayoutTemplates();
       const template = library.templates.find(candidate => candidate.id === templateId);
       if (!template) return fail(tool, 'UNKNOWN_TEMPLATE', `No layout template named "${templateId}" exists.`, 'templateId');
-      const width = context.canvasConfig.isFlipbook ? context.canvasConfig.width * 2 : context.canvasConfig.width;
-      const page = instantiateLayoutTemplate(template, { width, height: context.canvasConfig.height });
+      const targetBoard = context.activeBoardId
+        ? context.elements.find(element => element.id === context.activeBoardId && element.type === 'container')
+        : undefined;
+      if (context.activeBoardId && !targetBoard) {
+        return fail(tool, 'BOARD_NOT_FOUND', 'The selected board no longer exists. Capture the canvas and select a board again.');
+      }
+      const target = targetBoard
+        ? { x: targetBoard.x, y: targetBoard.y, width: targetBoard.w, height: targetBoard.h }
+        : {
+            x: 0,
+            y: 0,
+            width: context.canvasConfig.isFlipbook ? context.canvasConfig.width * 2 : context.canvasConfig.width,
+            height: context.canvasConfig.height,
+          };
+      const zIndexStart = context.elements.reduce((max, element) => Math.max(max, element.zIndex), 0) + 1;
+      const layoutElements = instantiateLayoutTemplate(template, target, zIndexStart);
+      const targetName = targetBoard?.name || 'main board';
       return {
         success: true,
         tool,
-        message: `Loaded ${template.name} as new page ${context.pageCount + 1}.`,
+        message: `Added ${template.name} to ${targetName} without removing existing content.`,
         data: {
           templateId: template.id,
-          pageIndex: context.pageCount,
-          slotCount: page.length,
-          slots: page.map(element => ({ elementId: element.id, name: element.name, templateSlotId: element.layoutSlot?.templateSlotId })),
+          pageIndex: context.currentPage,
+          targetBoardId: targetBoard?.id || null,
+          slotCount: layoutElements.length,
+          slots: layoutElements.map(element => ({ elementId: element.id, name: element.name, templateSlotId: element.layoutSlot?.templateSlotId })),
           warning: library.error,
         },
-        effects: { expectedRevision: expected, pageToAppend: page },
+        effects: { expectedRevision: expected, layoutElementsToAdd: layoutElements },
       };
     }
 

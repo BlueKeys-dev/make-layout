@@ -127,7 +127,7 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
   {
     name: 'load_layout_template',
     title: 'Load reusable layout',
-    description: 'Appends a new page containing empty slots from a compatible template. Requires the UI lock and current revision; existing pages are preserved.',
+    description: 'Adds empty slots from a compatible template to the selected board, or the main board when no secondary board is selected. Existing boards and canvas objects are preserved. Requires the UI lock and current revision.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,

@@ -79,6 +79,11 @@ const normalizeRect = (start: { x: number; y: number }, current: { x: number; y:
     return { x, y, w: Math.abs(current.x - start.x), h: Math.abs(current.y - start.y) };
 };
 
+const getInitialViewPosition = () => {
+    const { width, height } = getEffectiveDimensions(DEFAULT_CANVAS_CONFIG);
+    return { x: -width / 2, y: -height / 2 };
+};
+
 const getInitialPages = (): CanvasElement[][] => {
     try {
         const saved = localStorage.getItem('ai-layout-pages');
@@ -148,7 +153,7 @@ export const DesignEditor = () => {
     const [showPDFViewer, setShowPDFViewer] = useState(false);
 
     // -- Infinite Canvas State --
-    const [viewPos, setViewPos] = useState({ x: 0, y: 0 });
+    const [viewPos, setViewPos] = useState(getInitialViewPosition);
     const [isPanning, setIsPanning] = useState(false);
     const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
@@ -184,7 +189,6 @@ export const DesignEditor = () => {
     const marqueeRectRef = useRef<Bounds | null>(null);
     const [marqueeRect, setMarqueeRect] = useState<Bounds | null>(null);
     const { width: logicalWidth, height: logicalHeight } = getEffectiveDimensions(canvasConfig);
-    const layoutOrientation = logicalWidth === logicalHeight ? 'square' : logicalWidth > logicalHeight ? 'landscape' : 'portrait';
 
     // -- Interaction Hooks --
     const {
@@ -210,12 +214,16 @@ export const DesignEditor = () => {
 
     const handleLoadLayoutTemplate = useCallback((template: LayoutTemplate) => {
         try {
-            const newPage = instantiateLayoutTemplate(template, { width: logicalWidth, height: logicalHeight });
-            const newPageIndex = pageCountRef.current;
-            setPages(previous => [...previous, newPage]);
-            setCurrentPage(newPageIndex);
-            setSelectedIds([]);
-            setSelectedBoardId('primary');
+            const targetBoard = activeBoardIdRef.current
+                ? elementsRef.current.find(element => element.id === activeBoardIdRef.current && element.type === 'container')
+                : undefined;
+            if (activeBoardIdRef.current && !targetBoard) throw new Error('The selected board no longer exists. Select it again.');
+            const target = targetBoard
+                ? { x: targetBoard.x, y: targetBoard.y, width: targetBoard.w, height: targetBoard.h }
+                : { x: 0, y: 0, width: logicalWidth, height: logicalHeight };
+            const zIndexStart = elementsRef.current.reduce((max, element) => Math.max(max, element.zIndex), 0) + 1;
+            const layoutElements = instantiateLayoutTemplate(template, target, zIndexStart);
+            setElements(previous => [...previous, ...layoutElements]);
             setActiveTool('select');
             setLayoutLibrary(previous => ({ ...previous, error: null }));
             return true;
@@ -224,11 +232,18 @@ export const DesignEditor = () => {
             setLayoutLibrary(previous => ({ ...previous, error: loadError?.message || 'Layout could not be loaded.' }));
             return false;
         }
-    }, [logicalHeight, logicalWidth, setPages, setSelectedIds]);
+    }, [logicalHeight, logicalWidth, setElements]);
 
     const handleSaveLayoutTemplate = useCallback((name: string) => {
         try {
-            const template = createUserLayoutTemplate(name, elementsRef.current, { width: logicalWidth, height: logicalHeight });
+            const targetBoard = activeBoardIdRef.current
+                ? elementsRef.current.find(element => element.id === activeBoardIdRef.current && element.type === 'container')
+                : undefined;
+            if (activeBoardIdRef.current && !targetBoard) throw new Error('The selected board no longer exists. Select it again.');
+            const target = targetBoard
+                ? { x: targetBoard.x, y: targetBoard.y, width: targetBoard.w, height: targetBoard.h }
+                : { x: 0, y: 0, width: logicalWidth, height: logicalHeight };
+            const template = createUserLayoutTemplate(name, elementsRef.current, target);
             const saved = loadUserLayoutTemplates();
             storeUserLayoutTemplates([...saved.templates, template]);
             refreshLayoutLibrary(saved.error);
@@ -268,6 +283,11 @@ export const DesignEditor = () => {
     const activeBoard = selectedBoardId !== 'primary'
         ? elements.find(e => e.id === selectedBoardId)
         : null;
+    const layoutTargetWidth = activeBoard?.w ?? logicalWidth;
+    const layoutTargetHeight = activeBoard?.h ?? logicalHeight;
+    const layoutTargetOrientation = layoutTargetWidth === layoutTargetHeight
+        ? 'square'
+        : layoutTargetWidth > layoutTargetHeight ? 'landscape' : 'portrait';
 
     elementsRef.current = elements;
     canvasConfigRef.current = canvasConfig;
@@ -949,13 +969,10 @@ export const DesignEditor = () => {
             setSelectedIds([element.id]);
         }
 
-        if (effects.pageToAppend) {
-            const newPageIndex = pageCountRef.current;
-            setPages(previous => [...previous, effects.pageToAppend as CanvasElement[]]);
-            setCurrentPage(newPageIndex);
-            setSelectedIds([]);
-            setSelectedBoardId('primary');
-            setActiveTool('select');
+        if (effects.layoutElementsToAdd) {
+            const layoutElements = effects.layoutElementsToAdd;
+            setElements(previous => [...previous, ...layoutElements]);
+            setSelectedIds(layoutElements.map(element => element.id));
         }
 
         if (effects.elementReplacement) {
@@ -1031,7 +1048,7 @@ export const DesignEditor = () => {
         });
 
         return { success: true, revision: canvasRevisionRef.current };
-    }, [activeBoard, addChatMessage, confirmDelete?.isOpen, requestConfirmation, setElements, setPages, setSelectedIds]);
+    }, [activeBoard, addChatMessage, confirmDelete?.isOpen, requestConfirmation, setElements, setSelectedIds]);
 
     applyCanvasToolOutcomeRef.current = applyCanvasToolOutcome;
 
@@ -1462,7 +1479,7 @@ export const DesignEditor = () => {
                             }));
                         }}
                         layoutTemplates={layoutLibrary.templates}
-                        layoutOrientation={layoutOrientation}
+                        layoutOrientation={layoutTargetOrientation}
                         layoutError={layoutLibrary.error}
                         onLoadLayout={handleLoadLayoutTemplate}
                         onSaveLayout={handleSaveLayoutTemplate}

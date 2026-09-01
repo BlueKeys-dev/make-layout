@@ -415,7 +415,7 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
           // Shapes appear with their distinct base scales
           .to(shapes, {
             opacity: 0.9,
-            scale: (i) => flowerShapes[i].baseScale,
+            scale: (i: number) => flowerShapes[i].baseScale,
             filter: "blur(0px) brightness(1)",
             duration: 1.5,
             stagger: { amount: 0.8, from: "random" },
@@ -442,7 +442,7 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
               const target = charPositions[i % charPositions.length];
               return target.y - (parseFloat(getComputedStyle(el).top) + 64);
             },
-            scale: (i) => flowerShapes[i].baseScale * 0.4, // Keep hierarchy during convergence
+            scale: (i: number) => flowerShapes[i].baseScale * 0.4, // Keep hierarchy during convergence
             rotation: (i: number) => i % 2 === 0 ? "+=720" : "-=720",
             filter: "blur(4px) brightness(1.8)",
             duration: 2,
@@ -839,9 +839,10 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
 
           {/* Header Badge - Industrial Style */}
           <div className={`hero-element flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-2.5 rounded-full glass-panel-soft hover:border-[${THEME.primary}]/30 transition-all cursor-default`}>
-            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full animate-pulse" style={{ backgroundColor: THEME.primary, boxShadow: `0 0 12px ${THEME.primary}` }} />
-            <span className="text-[8px] sm:text-[10px] font-semibold tracking-[0.2em] sm:tracking-[0.25em] uppercase font-['JetBrains_Mono']" style={{ color: THEME.text }}>AI Ready</span>
+            <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full animate-pulse" style={{ backgroundColor: THEME.accent, boxShadow: `0 0 12px ${THEME.accent}` }} />
+            <span className="text-[8px] sm:text-[10px] font-semibold tracking-[0.2em] sm:tracking-[0.25em] uppercase font-['JetBrains_Mono']" style={{ color: THEME.text }}>needs api key</span>
           </div>
+     
 
           {/* Main Title */}
           <div className="relative p-2 sm:p-4 perspective-1000 text-center px-4">

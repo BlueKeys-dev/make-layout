@@ -331,6 +331,60 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                         </div>
                     </div>
                 </div>
+
+                {/* Table Colors */}
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                    <div>
+                        <span className="text-[10px] text-text-secondary-dark mb-1 block">Cell Background</span>
+                        <div className="flex items-center gap-2 p-1.5 rounded bg-gray-50 dark:bg-black/20 border border-transparent hover:border-border-light cursor-pointer">
+                            <input
+                                type="color"
+                                value={(() => {
+                                    const c = selectedElement.color;
+                                    if (c && c.startsWith('#') && c.length >= 7) return c.substring(0, 7);
+                                    return '#ffffff';
+                                })()}
+                                onChange={(e) => onUpdateElements(selectedIds, { color: e.target.value })}
+                                className="w-5 h-5 rounded cursor-pointer border-0 p-0"
+                            />
+                            <input
+                                type="text"
+                                value={selectedElement.color || ''}
+                                placeholder="Auto"
+                                onChange={(e) => onUpdateElements(selectedIds, { color: e.target.value })}
+                                className="w-full text-xs bg-transparent border-none p-0 text-text-primary-light dark:text-text-primary-dark font-mono focus:outline-none"
+                            />
+                        </div>
+                    </div>
+                    <div>
+                        <span className="text-[10px] text-text-secondary-dark mb-1 block">Text Color</span>
+                        <div className="flex items-center gap-2 p-1.5 rounded bg-gray-50 dark:bg-black/20 border border-transparent hover:border-border-light cursor-pointer">
+                            <input
+                                type="color"
+                                value={(() => {
+                                    const c = selectedElement.tableData?.textColor;
+                                    if (c && c.startsWith('#') && c.length >= 7) return c.substring(0, 7);
+                                    return '#000000';
+                                })()}
+                                onChange={(e) => {
+                                    const newData = { ...selectedElement.tableData, textColor: e.target.value };
+                                    onUpdateElements(selectedIds, { tableData: newData as any });
+                                }}
+                                className="w-5 h-5 rounded cursor-pointer border-0 p-0"
+                            />
+                            <input
+                                type="text"
+                                value={selectedElement.tableData?.textColor || ''}
+                                placeholder="Auto"
+                                onChange={(e) => {
+                                    const newData = { ...selectedElement.tableData, textColor: e.target.value };
+                                    onUpdateElements(selectedIds, { tableData: newData as any });
+                                }}
+                                className="w-full text-xs bg-transparent border-none p-0 text-text-primary-light dark:text-text-primary-dark font-mono focus:outline-none"
+                            />
+                        </div>
+                    </div>
+                </div>
             </div>
           )}
 

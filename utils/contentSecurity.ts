@@ -19,13 +19,65 @@ const ALLOWED_RICH_TEXT_TAGS = new Set([
 const FORBIDDEN_SVG_TAGS = new Set([
   'audio',
   'embed',
-  'foreignobject',
   'iframe',
   'image',
   'object',
   'script',
   'video',
 ]);
+
+const ALLOWED_FOREIGN_OBJECT_TAGS = new Set([
+  'b',
+  'br',
+  'div',
+  'em',
+  'i',
+  'li',
+  'ol',
+  'p',
+  'span',
+  'strong',
+  'sub',
+  'sup',
+  'u',
+  'ul',
+]);
+
+const sanitizeForeignObjectElement = (foreignObject: Element) => {
+  for (const element of Array.from(foreignObject.querySelectorAll('*')).reverse()) {
+    const tag = element.tagName.toLowerCase();
+    if (!ALLOWED_FOREIGN_OBJECT_TAGS.has(tag)) {
+      unwrapElement(element);
+      continue;
+    }
+
+    for (const attribute of Array.from(element.attributes)) {
+      const name = attribute.name.toLowerCase();
+      const value = attribute.value.trim();
+      if (name === 'xmlns') continue;
+      if (
+        name.startsWith('on') ||
+        /(?:javascript|vbscript|data)\s*:/i.test(value) ||
+        (name === 'style' && (/url\s*\(\s*(?!#)[^)]+\)/i.test(value) || /@import/i.test(value)))
+      ) {
+        element.removeAttribute(attribute.name);
+      }
+    }
+  }
+
+  for (const attribute of Array.from(foreignObject.attributes)) {
+    const name = attribute.name.toLowerCase();
+    const value = attribute.value.trim();
+    const isGeometry = ['x', 'y', 'width', 'height', 'transform'].includes(name);
+    const hasUnsafeValue =
+      name.startsWith('on') ||
+      /(?:javascript|vbscript|data)\s*:/i.test(value) ||
+      (name === 'style' && (/url\s*\(\s*(?!#)[^)]+\)/i.test(value) || /@import/i.test(value)));
+    if (!isGeometry || hasUnsafeValue) {
+      foreignObject.removeAttribute(attribute.name);
+    }
+  }
+};
 
 const unwrapElement = (element: Element) => {
   const parent = element.parentNode;
@@ -69,12 +121,20 @@ export const sanitizeMermaidSource = (source: string): string => source
 
 export const sanitizeMermaidSvg = (svg: string): string => {
   const parser = new DOMParser();
-  const documentNode = parser.parseFromString(svg, 'image/svg+xml');
+  // Mermaid can emit the HTML-only named entity &nbsp;, which strict SVG/XML
+  // parsing rejects even though browsers render it correctly in HTML.
+  const xmlSafeSvg = svg.replace(/&nbsp;/gi, '&#160;');
+  const documentNode = parser.parseFromString(xmlSafeSvg, 'image/svg+xml');
   if (documentNode.querySelector('parsererror')) {
     throw new Error('Mermaid produced invalid SVG.');
   }
 
   for (const element of Array.from(documentNode.querySelectorAll('*'))) {
+    const tag = element.tagName.toLowerCase();
+    if (tag === 'foreignobject') {
+      sanitizeForeignObjectElement(element);
+      continue;
+    }
     if (element.tagName.toLowerCase() === 'a') {
       unwrapElement(element);
       continue;
