@@ -2,67 +2,109 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import pptxgen from 'pptxgenjs';
 import { CanvasElement, CanvasConfig } from '../types';
+import { getEffectiveDimensions } from '../config/canvasDefaults';
 
 interface CaptureCanvasOptions {
   backgroundColor?: string | null;
 }
+
+const CANVAS_EXPORT_ROOT_SELECTOR = '[data-canvas-export-root]';
+
+const resolveCaptureTarget = (root: HTMLElement): HTMLElement => {
+  const exportRoot = root.querySelector(CANVAS_EXPORT_ROOT_SELECTOR);
+  if (exportRoot instanceof HTMLElement) return exportRoot;
+  return root;
+};
+
+const getCaptureDimensions = (target: HTMLElement) => {
+  const width =
+    Number(target.dataset.exportWidth) ||
+    target.offsetWidth ||
+    target.scrollWidth;
+  const height =
+    Number(target.dataset.exportHeight) ||
+    target.offsetHeight ||
+    target.scrollHeight;
+  return { width, height };
+};
+
+const resetCloneTransforms = (doc: Document, width: number, height: number) => {
+  const clonedRoot = doc.querySelector(CANVAS_EXPORT_ROOT_SELECTOR);
+  if (!(clonedRoot instanceof HTMLElement)) return;
+
+  let node: HTMLElement | null = clonedRoot;
+  while (node) {
+    node.style.transform = 'none';
+    node = node.parentElement;
+  }
+
+  clonedRoot.style.width = `${width}px`;
+  clonedRoot.style.height = `${height}px`;
+};
+
+const canvasToPngDataUrl = (canvas: HTMLCanvasElement) => {
+  const dataUrl = canvas.toDataURL('image/png');
+  if (!dataUrl.startsWith('data:image/png;base64,')) {
+    throw new Error(`Invalid PNG data URL (canvas ${canvas.width}x${canvas.height})`);
+  }
+  return dataUrl;
+};
 
 /**
  * Helper to capture high-quality canvas image
  * Includes optimizations for text rendering, dark mode, and transform normalization.
  */
 const captureCanvas = async (element: HTMLElement, options: CaptureCanvasOptions = {}) => {
-  // Ensure fonts are fully loaded before capturing
   await document.fonts.ready;
 
-  // Detect if dark mode is active on the root document
+  const target = resolveCaptureTarget(element);
+  const { width, height } = getCaptureDimensions(target);
+
+  if (width <= 0 || height <= 0) {
+    throw new Error(`Cannot capture canvas with zero dimensions (${width}x${height})`);
+  }
+
   const isDarkMode = document.documentElement.classList.contains('dark');
 
-  return await html2canvas(element, {
-    scale: 3, // High resolution (3x)
+  const canvas = await html2canvas(target, {
+    width,
+    height,
+    scale: 2,
     useCORS: true,
     allowTaint: true,
     backgroundColor: options.backgroundColor === null ? null : (options.backgroundColor ?? '#ffffff'),
     logging: false,
     onclone: (doc) => {
-      // 1. Persist Dark Mode
       if (isDarkMode) {
         doc.documentElement.classList.add('dark');
       }
 
-      // 2. Reset Zoom/Pan Transforms on the canvas board
-      const el = doc.querySelector('[style*="transform"]');
-      if (el instanceof HTMLElement) {
-          el.style.transform = 'none';
-      }
+      resetCloneTransforms(doc, width, height);
 
-      // 3. Prevent Text Clipping (The "Cut Off" Fix)
-      // We explicitly set the content wrappers to visible overflow during export
-      // so that slightly larger font metrics in the canvas renderer don't get clipped.
       const wrappers = doc.querySelectorAll('.element-content-wrapper');
       wrappers.forEach((wrapper) => {
-          if(wrapper instanceof HTMLElement) {
-              wrapper.style.overflow = 'visible';
-          }
+        if (wrapper instanceof HTMLElement) {
+          wrapper.style.overflow = 'visible';
+        }
       });
 
-      // Empty layout slots are editor guides, not exported artwork.
       doc.querySelectorAll('[data-layout-slot-empty="true"]').forEach((slot) => slot.remove());
+      doc.querySelectorAll('[data-export-hide="true"]').forEach((node) => node.remove());
 
-      // 4. Optimize Text Rendering Quality
       const textElements = doc.querySelectorAll('*');
       textElements.forEach((node) => {
-          if (node instanceof HTMLElement) {
-             const style = window.getComputedStyle(node);
-             if (style.fontFamily) {
-                 node.style.textRendering = 'geometricPrecision';
-                 // These vendor prefixes help in some headless environments
-                 node.style.setProperty('-webkit-font-smoothing', 'antialiased');
-             }
+        if (node instanceof HTMLElement) {
+          const style = window.getComputedStyle(node);
+          if (style.fontFamily) {
+            node.style.textRendering = 'geometricPrecision';
+            node.style.setProperty('-webkit-font-smoothing', 'antialiased');
           }
+        }
       });
-    }
+    },
   });
+
+  return canvas;
 };
 
 /**
@@ -75,10 +117,10 @@ export const downloadAsPNG = async (
   if (!canvasRef.current) return;
 
   try {
-    const canvas = await captureCanvas(canvasRef.current, { backgroundColor: null });
+    const canvas = await captureCanvas(canvasRef.current, { backgroundColor: '#ffffff' });
     const link = document.createElement('a');
     link.download = `${filename}.png`;
-    link.href = canvas.toDataURL('image/png');
+    link.href = canvasToPngDataUrl(canvas);
     link.click();
   } catch (error) {
     console.error('PNG conversion failed:', error);
@@ -97,7 +139,7 @@ export const downloadAsPDF = async (
   if (!canvasRef.current) return;
 
   try {
-    const { width, height } = canvasConfig;
+    const { width, height } = getEffectiveDimensions(canvasConfig);
     const orientation = width > height ? 'landscape' : 'portrait';
 
     const pdf = new jsPDF({
@@ -106,8 +148,10 @@ export const downloadAsPDF = async (
       format: [width, height],
     });
 
-    const canvas = await captureCanvas(canvasRef.current, { backgroundColor: canvasConfig.backgroundColor });
-    const imgData = canvas.toDataURL('image/png');
+    const canvas = await captureCanvas(canvasRef.current, {
+      backgroundColor: canvasConfig.backgroundColor ?? '#ffffff',
+    });
+    const imgData = canvasToPngDataUrl(canvas);
     pdf.addImage(imgData, 'PNG', 0, 0, width, height);
     pdf.save(`${filename}.pdf`);
   } catch (error) {
@@ -127,16 +171,19 @@ export const downloadAsPPTX = async (
   if (!canvasRef.current) return;
 
   try {
+    const { width, height } = getEffectiveDimensions(canvasConfig);
     const pptx = new pptxgen();
-    const inchWidth = canvasConfig.width / 96; 
-    const inchHeight = canvasConfig.height / 96;
+    const inchWidth = width / 96;
+    const inchHeight = height / 96;
 
     pptx.defineLayout({ name: 'CUSTOM_LAYOUT', width: inchWidth, height: inchHeight });
     pptx.layout = 'CUSTOM_LAYOUT';
 
     const slide = pptx.addSlide();
-    const canvas = await captureCanvas(canvasRef.current, { backgroundColor: canvasConfig.backgroundColor });
-    const imgData = canvas.toDataURL('image/png');
+    const canvas = await captureCanvas(canvasRef.current, {
+      backgroundColor: canvasConfig.backgroundColor ?? '#ffffff',
+    });
+    const imgData = canvasToPngDataUrl(canvas);
 
     slide.addImage({
       data: imgData,
@@ -171,12 +218,12 @@ export const exportAsJSON = (
 
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    
+
     const link = document.createElement('a');
     link.download = `${filename}.json`;
     link.href = url;
     link.click();
-    
+
     URL.revokeObjectURL(url);
   } catch (error) {
     console.error('JSON export failed:', error);

@@ -97,6 +97,13 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
           overflow: 'visible' // Allow infinite children
         }}
       >
+        <div
+          data-canvas-export-root
+          data-export-width={logicalWidth}
+          data-export-height={logicalHeight}
+          className="relative"
+          style={{ width: logicalWidth, height: logicalHeight, overflow: 'visible' }}
+        >
         {/* === Primary Page/Board === */}
         {/* We render this as the "Base" board at 0,0 */}
         <div
@@ -295,6 +302,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
             }}
           />
         )}
+        </div>
       </div>
     </main>
   );

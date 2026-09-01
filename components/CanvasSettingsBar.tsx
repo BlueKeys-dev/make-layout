@@ -164,7 +164,7 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
   };
 
   return (
-    <div className="absolute top-6 left-1/2 z-20 mt-14 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-border-light bg-surface-light p-1.5 shadow-floating transition-all dark:border-2 dark:border-border-dark dark:bg-surface-dark dark:shadow-floating-dark lg:max-w-none lg:flex-nowrap lg:justify-start lg:gap-3 lg:p-2">
+    <div className="absolute top-5 left-1/2 z-20 mt-10 flex max-w-[calc(100%-1rem)] -translate-x-1/2 flex-wrap items-center justify-center gap-1.5 rounded-xl border border-border-light bg-surface-light p-1.5 shadow-floating transition-all dark:border-2 dark:border-border-dark dark:bg-surface-dark dark:shadow-floating-dark lg:max-w-none lg:flex-nowrap lg:justify-start lg:gap-3 lg:p-2">
 
       {/* Add Board */}
       <button

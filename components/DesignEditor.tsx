@@ -1523,7 +1523,7 @@ export const DesignEditor = () => {
                                 h: getEffectiveDimensions(canvasConfig).height,
                                 color: '#ffffff',
                                 zIndex: 0, // Background layer
-                                locked: true,
+                                locked: false,
                                 boardConfig: {
                                     backgroundColor: '#ffffff',
                                     borderRadius: canvasConfig.borderRadius,
@@ -1659,7 +1659,7 @@ export const DesignEditor = () => {
                                 zIndex: 0,
                                 name: `PDF Page ${pageNum}`,
                                 content: 'board',
-                                locked: true,
+                                locked: false,
                                 boardConfig: {
                                     backgroundColor: '#ffffff',
                                     gridCols: 12,
@@ -1739,7 +1739,7 @@ export const DesignEditor = () => {
                                     zIndex: 0,
                                     name: `PDF Page ${page.pageNumber}`,
                                     content: 'board',
-                                    locked: true,
+                                    locked: false,
                                     boardConfig: {
                                         backgroundColor: '#ffffff',
                                         gridCols: 12,

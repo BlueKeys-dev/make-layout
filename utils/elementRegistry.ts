@@ -139,7 +139,7 @@ export const createElementFactory = (
         h: 500,
         color: 'bg-slate-100/50',
         name: 'Container',
-        locked: true,
+        locked: false,
         boardConfig: {
           showGrid: true,
           gridRows: 12,
@@ -158,5 +158,4 @@ export const getElementDefaultSize = (type: ElementType) => {
   return { w: temp.w, h: temp.h };
 };
 
-export const isElementLocked = (el: CanvasElement) =>
-  el.type === 'container' ? el.locked !== false : !!el.locked;
+export const isElementLocked = (el: CanvasElement) => !!el.locked;
