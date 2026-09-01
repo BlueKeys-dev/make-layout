@@ -3,6 +3,7 @@ import { X, Play, Plus, Loader2, Sparkles, BrainCircuit, Workflow, ArrowRightLef
 import mermaid from 'mermaid';
 import { generateMindMapCode } from '../services/mindMapService';
 import { DiagramType, DIAGRAM_CONFIGS } from '../types/diagramTypes';
+import { sanitizeMermaidSource, sanitizeMermaidSvg } from '../utils/contentSecurity';
 
 interface MindMapGeneratorProps {
   onClose: () => void;
@@ -50,8 +51,9 @@ export const MindMapGenerator: React.FC<MindMapGeneratorProps> = ({ onClose, onI
     if (!mermaidInitialized) {
       mermaid.initialize({
         startOnLoad: false,
-        securityLevel: 'loose',
+        securityLevel: 'strict',
         theme: 'default',
+        flowchart: { htmlLabels: false },
       });
       mermaidInitialized = true;
     }
@@ -67,8 +69,8 @@ export const MindMapGenerator: React.FC<MindMapGeneratorProps> = ({ onClose, onI
       renderIdCounterRef.current += 1;
       const id = `preview-mermaid-${renderIdCounterRef.current}`;
 
-      const { svg } = await mermaid.render(id, codeToRender);
-      const fixedSvg = applyTextColorFix(svg);
+      const { svg } = await mermaid.render(id, sanitizeMermaidSource(codeToRender));
+      const fixedSvg = sanitizeMermaidSvg(applyTextColorFix(svg));
 
       if (previewRef.current) {
         previewRef.current.innerHTML = fixedSvg;
@@ -154,7 +156,7 @@ export const MindMapGenerator: React.FC<MindMapGeneratorProps> = ({ onClose, onI
   );
 
   const handleInsert = useCallback(() => {
-    onInsert(code);
+    onInsert(sanitizeMermaidSource(code));
   }, [code, onInsert]);
 
   return (

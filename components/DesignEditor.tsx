@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Moon, Sun, Crosshair, Trash2, BookOpen, AlertTriangle, X, Info } from 'lucide-react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
+import { Moon, Sun, Crosshair, Trash2, BookOpen, AlertTriangle, X, Info, LockKeyhole, Unlock } from 'lucide-react';
 import { CanvasElement, ElementType, CanvasConfig, ChatMessage, LayoutPlan, AIModelId } from '../types';
 import { INITIAL_ELEMENTS } from '../data';
 import { SECTIONS } from '../data';
@@ -26,6 +26,9 @@ import { useHistory } from '../hooks/useHistory';
 import { PDFViewer } from './PDFViewer';
 import { SHAPES } from './ShapeLibrary';
 import { ShapeType } from '../types';
+import { CanvasToolOutcome } from '../services/canvasToolEngine';
+import { CanvasToolName } from '../services/canvasToolCatalog';
+import { registerDesignTools } from '../services/webmcp';
 
 type Bounds = { x: number; y: number; w: number; h: number };
 
@@ -144,7 +147,8 @@ export const DesignEditor = () => {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [activeModelId, setActiveModelId] = useState<AIModelId>(getDefaultModel().id);
     const [pendingPlan, setPendingPlan] = useState<LayoutPlan | null>(null);
-    const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; title: string; onConfirm: () => void } | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; title: string; onConfirm: () => void; onCancel?: () => void } | null>(null);
+    const [isUiLocked, setIsUiLocked] = useState(false);
 
     const canvasRef = useRef<HTMLDivElement>(null);
     const scaleRef = useRef(scale);
@@ -158,6 +162,16 @@ export const DesignEditor = () => {
     const rafIdRef = useRef<number | null>(null); // RequestAnimationFrame ID
     const marqueeRef = useRef<{ start: { x: number; y: number }; additive: boolean; baseIds: string[] } | null>(null);
     const elementsRef = useRef<CanvasElement[]>([]);
+    const canvasConfigRef = useRef(canvasConfig);
+    const currentPageRef = useRef(currentPage);
+    const pageCountRef = useRef(pages.length);
+    const selectedIdsRef = useRef<string[]>([]);
+    const activeBoardIdRef = useRef<string | null>(null);
+    const uiLockedRef = useRef(false);
+    const canvasRevisionRef = useRef(0);
+    const previousCanvasRef = useRef({ pages, currentPage });
+    const webMcpRegistrationEpochRef = useRef(0);
+    const applyCanvasToolOutcomeRef = useRef<((outcome: CanvasToolOutcome, signal: AbortSignal, announce: boolean) => Promise<{ success: boolean; revision: number; error?: { code: string; message: string } }>) | undefined>(undefined);
     const marqueeRectRef = useRef<Bounds | null>(null);
     const [marqueeRect, setMarqueeRect] = useState<Bounds | null>(null);
     const { width: logicalWidth, height: logicalHeight } = getEffectiveDimensions(canvasConfig);
@@ -191,6 +205,28 @@ export const DesignEditor = () => {
     const activeBoard = selectedBoardId !== 'primary'
         ? elements.find(e => e.id === selectedBoardId)
         : null;
+
+    elementsRef.current = elements;
+    canvasConfigRef.current = canvasConfig;
+    currentPageRef.current = currentPage;
+    pageCountRef.current = pages.length;
+    selectedIdsRef.current = selectedIds;
+    activeBoardIdRef.current = activeBoard?.id || null;
+    uiLockedRef.current = isUiLocked;
+
+    useLayoutEffect(() => {
+        if (previousCanvasRef.current.pages !== pages || previousCanvasRef.current.currentPage !== currentPage) {
+            canvasRevisionRef.current += 1;
+            previousCanvasRef.current = { pages, currentPage };
+        }
+    }, [pages, currentPage]);
+
+    useEffect(() => {
+        if (!isUiLocked) return;
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+        const timeout = window.setTimeout(() => setIsUiLocked(false), 5 * 60 * 1000);
+        return () => window.clearTimeout(timeout);
+    }, [isUiLocked]);
 
     // --- Viewport / Centering Logic ---
     // The canvas uses `translate(vx, vy) scale(s)`. For a canvas point (tx, ty) to appear
@@ -231,10 +267,6 @@ export const DesignEditor = () => {
             y: (clientY - rect.top) / scale
         };
     }, [scale, viewPos]); // viewPos dependency implicitly handled by getBoundingClientRect, but kept for clarity
-
-    useEffect(() => {
-        elementsRef.current = elements;
-    }, [elements]);
 
     const applyMarqueeHits = useCallback((rect: Bounds, additive: boolean, baseIds: string[]) => {
         const hits = elementsRef.current
@@ -698,6 +730,7 @@ export const DesignEditor = () => {
     }, [zoomTo]);
 
     useKeyboardShortcuts({
+        enabled: !isUiLocked,
         selectedIds,
         setSelectedIds,
         elements,
@@ -744,7 +777,7 @@ export const DesignEditor = () => {
     }, [zoomTo]);
 
     // --- Chat Handlers ---
-    const addChatMessage = (role: 'user' | 'assistant' | 'system', content: string, layoutPlan?: LayoutPlan, imageSearchResults?: Array<{ id: string; url: string; thumbnail: string; alt: string; photographer: string }>) => {
+    const addChatMessage = useCallback((role: 'user' | 'assistant' | 'system', content: string, layoutPlan?: LayoutPlan, imageSearchResults?: Array<{ id: string; url: string; thumbnail: string; alt: string; photographer: string }>) => {
         const newMessage: ChatMessage = {
             id: crypto.randomUUID(),
             role: role as 'user' | 'assistant', // System usually mapped to assistant visually or handled
@@ -755,7 +788,160 @@ export const DesignEditor = () => {
             imageSearchResults,
         };
         setChatMessages(prev => [...prev, newMessage]);
-    };
+    }, [activeModelId]);
+
+    const requestConfirmation = useCallback((title: string, signal: AbortSignal) => new Promise<boolean>((resolve) => {
+        if (signal.aborted) {
+            resolve(false);
+            return;
+        }
+
+        let settled = false;
+        const finish = (confirmed: boolean) => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timeout);
+            signal.removeEventListener('abort', handleAbort);
+            setConfirmDelete(null);
+            resolve(confirmed);
+        };
+        const handleAbort = () => finish(false);
+        const timeout = window.setTimeout(() => finish(false), 60_000);
+        signal.addEventListener('abort', handleAbort, { once: true });
+        setConfirmDelete({
+            isOpen: true,
+            title,
+            onConfirm: () => finish(true),
+            onCancel: () => finish(false),
+        });
+    }), []);
+
+    const applyCanvasToolOutcome = useCallback(async (
+        outcome: CanvasToolOutcome,
+        signal: AbortSignal,
+        announce: boolean,
+    ): Promise<{ success: boolean; revision: number; error?: { code: string; message: string } }> => {
+        const effects = outcome.effects;
+        if (!effects) return { success: true, revision: canvasRevisionRef.current };
+        signal.throwIfAborted();
+
+        const expectedRevision = effects.expectedRevision;
+        if (announce && expectedRevision !== undefined && !uiLockedRef.current) {
+            return { success: false, revision: canvasRevisionRef.current, error: { code: 'UI_NOT_LOCKED', message: 'The UI lock expired or was released before the canvas write completed.' } };
+        }
+        if (expectedRevision !== undefined && expectedRevision !== canvasRevisionRef.current) {
+            return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: `Canvas revision changed to ${canvasRevisionRef.current}; capture it again.` } };
+        }
+
+        if (effects.uiLocked !== undefined) setIsUiLocked(effects.uiLocked);
+
+        if (effects.elementIdToRemove) {
+            if (confirmDelete?.isOpen) {
+                return { success: false, revision: canvasRevisionRef.current, error: { code: 'CONFIRMATION_BUSY', message: 'Another confirmation is already open.' } };
+            }
+            const target = elementsRef.current.find(element => element.id === effects.elementIdToRemove);
+            if (!target) return { success: false, revision: canvasRevisionRef.current, error: { code: 'ELEMENT_NOT_FOUND', message: 'The element no longer exists.' } };
+            const reason = effects.removalReason ? ` Reason: ${effects.removalReason}` : '';
+            const confirmed = await requestConfirmation(`Remove "${target.name}" from the canvas?${reason}`, signal);
+            signal.throwIfAborted();
+            if (!confirmed) return { success: false, revision: canvasRevisionRef.current, error: { code: 'USER_CANCELLED', message: 'The user cancelled or did not confirm removal.' } };
+            if (announce && !uiLockedRef.current) {
+                return { success: false, revision: canvasRevisionRef.current, error: { code: 'UI_NOT_LOCKED', message: 'The UI lock expired or was released while confirmation was open.' } };
+            }
+            if (expectedRevision !== canvasRevisionRef.current) {
+                return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: 'The canvas changed while confirmation was open.' } };
+            }
+            setElements(previous => previous.filter(element => element.id !== target.id));
+            setSelectedIds(selectedIdsRef.current.filter(id => id !== target.id));
+        }
+
+        if (effects.elementToAdd) {
+            const offsetX = announce ? 0 : activeBoard?.x ?? 0;
+            const offsetY = announce ? 0 : activeBoard?.y ?? 0;
+            const element = { ...effects.elementToAdd, x: effects.elementToAdd.x + offsetX, y: effects.elementToAdd.y + offsetY };
+            setElements(previous => [...previous, element]);
+            setSelectedIds([element.id]);
+        }
+
+        if (effects.diagramCode) {
+            const centerX = -viewPosRef.current.x + (window.innerWidth / 2) / scaleRef.current;
+            const centerY = -viewPosRef.current.y + (window.innerHeight / 2) / scaleRef.current;
+            const diagram: CanvasElement = {
+                id: crypto.randomUUID(),
+                type: 'mindmap',
+                name: effects.diagramType ? `AI ${effects.diagramType}` : 'AI Diagram',
+                x: centerX - 250,
+                y: centerY - 200,
+                w: 500,
+                h: 400,
+                zIndex: elementsRef.current.reduce((max, element) => Math.max(max, element.zIndex), 0) + 1,
+                color: 'transparent',
+                mermaidCode: effects.diagramCode,
+            };
+            setElements(previous => [...previous, diagram]);
+            setSelectedIds([diagram.id]);
+        }
+
+        if (effects.pendingPlan) setPendingPlan(effects.pendingPlan);
+
+        if (announce) {
+            addChatMessage('system', outcome.message, effects.pendingPlan, effects.imageSearchResults);
+        }
+
+        await new Promise<void>((resolve, reject) => {
+            if (signal.aborted) {
+                reject(signal.reason);
+                return;
+            }
+            const frame = requestAnimationFrame(() => {
+                signal.removeEventListener('abort', handleAbort);
+                resolve();
+            });
+            const handleAbort = () => {
+                cancelAnimationFrame(frame);
+                reject(signal.reason);
+            };
+            signal.addEventListener('abort', handleAbort, { once: true });
+        });
+
+        return { success: true, revision: canvasRevisionRef.current };
+    }, [activeBoard, addChatMessage, confirmDelete?.isOpen, requestConfirmation, setElements, setSelectedIds]);
+
+    applyCanvasToolOutcomeRef.current = applyCanvasToolOutcome;
+
+    useEffect(() => {
+        const epoch = ++webMcpRegistrationEpochRef.current;
+        const lifecycleController = new AbortController();
+        const bridge = {
+            getContext: () => ({
+                elements: elementsRef.current,
+                canvasConfig: canvasConfigRef.current,
+                currentPage: currentPageRef.current,
+                pageCount: pageCountRef.current,
+                selectedIds: selectedIdsRef.current,
+                activeBoardId: activeBoardIdRef.current,
+                revision: canvasRevisionRef.current,
+                uiLocked: uiLockedRef.current,
+                requireUiLock: true,
+            }),
+            applyOutcome: (outcome: CanvasToolOutcome, signal: AbortSignal) => {
+                const apply = applyCanvasToolOutcomeRef.current;
+                if (!apply) return Promise.resolve({ success: false, revision: canvasRevisionRef.current, error: { code: 'EDITOR_NOT_READY', message: 'The editor is not ready.' } });
+                return apply(outcome, signal, true);
+            },
+        };
+
+        void registerDesignTools(bridge, lifecycleController).catch(error => {
+            if (epoch === webMcpRegistrationEpochRef.current) {
+                console.error('[WebMCP] Tool registration failed.', error);
+            }
+        });
+
+        return () => {
+            webMcpRegistrationEpochRef.current += 1;
+            lifecycleController.abort();
+        };
+    }, []);
 
     const handleStopGeneration = () => {
         if (abortControllerRef.current) {
@@ -786,99 +972,32 @@ export const DesignEditor = () => {
                 chatMessages,
                 elements,
                 canvasConfig,
+                canvasRevisionRef.current,
                 undefined,
                 controller.signal
             );
 
             addChatMessage('assistant', response.message, response.layoutPlan, response.imageSearchResults);
-
-            if (response.layoutPlan && response.requiresReview) {
-                setPendingPlan(response.layoutPlan);
-            }
-
-            if (response.elementToAdd) {
-                // Offset by active board position so elements land inside the selected board
-                const offsetX = activeBoard?.x ?? 0;
-                const offsetY = activeBoard?.y ?? 0;
-
-                const newElement = {
-                    ...response.elementToAdd,
-                    id: response.elementToAdd.id || crypto.randomUUID(),
-                    type: (response.elementToAdd as any).elementType || response.elementToAdd.type || 'shape',
-                    x: (response.elementToAdd.x || 100) + offsetX,
-                    y: (response.elementToAdd.y || 100) + offsetY,
-                    w: response.elementToAdd.w || (response.elementToAdd as any).width || 100,
-                    h: response.elementToAdd.h || (response.elementToAdd as any).height || 100,
-                    color: response.elementToAdd.color || '#e2e8f0',
-                    zIndex: response.elementToAdd.zIndex || elements.length + 1,
-                } as CanvasElement;
-                setElements(prev => [...prev, newElement]);
-            }
-
-            // Handle mind map generation from chat
-            if (response.mindMapCode) {
-                const centerX = -viewPos.x + (window.innerWidth / 2) / scale;
-                const centerY = -viewPos.y + (window.innerHeight / 2) / scale;
-                const mindMapElement: CanvasElement = {
-                    id: crypto.randomUUID(),
-                    type: 'mindmap',
-                    name: 'AI Mind Map',
-                    x: centerX - 250,
-                    y: centerY - 200,
-                    w: 500,
-                    h: 400,
-                    zIndex: elements.length + 10,
-                    color: 'transparent',
-                    mermaidCode: response.mindMapCode,
+            if (response.functionCalled) {
+                const outcome: CanvasToolOutcome = {
+                    success: true,
+                    tool: response.functionCalled as CanvasToolName,
+                    message: response.message,
+                    effects: {
+                        expectedRevision: response.expectedRevision,
+                        elementToAdd: response.elementToAdd as CanvasElement | undefined,
+                        elementIdToRemove: response.elementToRemove?.id,
+                        removalReason: response.removalReason,
+                        pendingPlan: response.layoutPlan,
+                        imageSearchResults: response.imageSearchResults,
+                        diagramCode: response.mindMapCode,
+                    },
                 };
-                setElements(prev => [...prev, mindMapElement]);
-                setSelectedIds([mindMapElement.id]);
-            }
-
-            if (response.elementToRemove) {
-                const elementIndex = elements.findIndex(
-                    el => el.name?.toLowerCase() === response.elementToRemove!.name.toLowerCase()
-                );
-                if (elementIndex !== -1) {
-                    if (response.elementToRemove.moveToWorkflow) {
-                        setElements(prev => prev.map((el, idx) =>
-                            idx === elementIndex ? { ...el, x: -1000, y: -1000 } : el
-                        ));
-                    } else {
-                        setElements(prev => prev.filter((_, idx) => idx !== elementIndex));
-                    }
-                }
-            }
-
-            if (response.canvasScreenshot === 'REQUEST_SCREENSHOT') {
-                const { captureCanvasScreenshot } = await import('../services/aiProviders');
-                try {
-                    const screenshot = await captureCanvasScreenshot(canvasRef);
-                    if (screenshot) {
-                        addChatMessage('system', 'Screenshot captured. Analyzing layout...');
-                        const imageAnalysisResponse = await processChatMessage(
-                            "I've captured the screenshot of the layout. Please analyze it as requested.",
-                            [...chatMessages, { id: 'sys-img', role: 'assistant', content: response.message, timestamp: Date.now() }],
-                            elements,
-                            canvasConfig,
-                            screenshot,
-                            controller.signal
-                        );
-                        addChatMessage('assistant', imageAnalysisResponse.message, imageAnalysisResponse.layoutPlan);
-                        if (imageAnalysisResponse.layoutPlan && imageAnalysisResponse.requiresReview) {
-                            setPendingPlan(imageAnalysisResponse.layoutPlan);
-                        }
-                    }
-                } catch (err) {
-                    console.error('Failed to capture screenshot:', err);
-                    addChatMessage('system', 'Failed to capture screenshot for analysis.');
-                }
+                const applied = await applyCanvasToolOutcome(outcome, controller.signal, false);
+                if (!applied.success) addChatMessage('system', applied.error?.message || 'The canvas action was not applied.');
             }
         } catch (error: any) {
-            if (error.message === 'Aborted') {
-                // Ignore aborted errors
-                return;
-            }
+            if (controller.signal.aborted || error?.name === 'AbortError') return;
             console.error(error);
             setErrorMessage("Failed to send message. " + (error.message || ''));
         } finally {
@@ -898,15 +1017,22 @@ export const DesignEditor = () => {
         setErrorMessage(null);
         // Use direct prompt if provided, otherwise fall back to chat history context
         const context = directPrompt || chatMessages.filter(m => m.role === 'user').slice(-3).map(m => m.content).join('. ');
+        const baseRevision = canvasRevisionRef.current;
         try {
             const { plan, message } = await quickGenerateLayout(
                 context || 'Create a professional, balanced layout',
                 elements,
-                canvasConfig
+                canvasConfig,
+                controller.signal,
             );
 
             if (controller.signal.aborted) return;
+            if (canvasRevisionRef.current !== baseRevision) {
+                setErrorMessage('The canvas changed while the layout was being generated. Please try again.');
+                return;
+            }
 
+            plan.baseRevision = baseRevision;
             setPendingPlan(plan);
             addChatMessage('assistant', `${message}\n\nWould you like to **proceed** with this layout or **modify** it?`, plan);
         } catch (error: any) {
@@ -923,6 +1049,10 @@ export const DesignEditor = () => {
 
     const handleProceedPlan = async () => {
         if (!pendingPlan) return;
+        if (pendingPlan.baseRevision !== undefined && pendingPlan.baseRevision !== canvasRevisionRef.current) {
+            setErrorMessage('This layout plan is stale because the canvas changed. Generate a new plan before applying it.');
+            return;
+        }
 
         if (abortControllerRef.current) abortControllerRef.current.abort();
         const controller = new AbortController();
@@ -1124,7 +1254,7 @@ export const DesignEditor = () => {
             )}
 
             {confirmDelete?.isOpen && (
-                <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => setConfirmDelete(null)}>
+                <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => { confirmDelete.onCancel?.(); setConfirmDelete(null); }}>
                     <div
                         className="bg-surface-dark w-full max-w-md rounded-3xl border border-red-500/20 shadow-[0_0_50px_rgba(239,68,68,0.1)] overflow-hidden animate-in zoom-in-95 duration-200"
                         onClick={e => e.stopPropagation()}
@@ -1145,13 +1275,32 @@ export const DesignEditor = () => {
                                     Yes, Delete Permanently
                                 </button>
                                 <button
-                                    onClick={() => setConfirmDelete(null)}
+                                    onClick={() => { confirmDelete.onCancel?.(); setConfirmDelete(null); }}
                                     className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-bold text-lg transition-all active:scale-[0.98]"
                                 >
                                     Cancel
                                 </button>
                             </div>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {isUiLocked && (
+                <div className="fixed inset-0 z-[150] bg-slate-950/35 backdrop-blur-[2px] flex items-start justify-center pt-5">
+                    <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-amber-400/30 bg-slate-950/95 px-5 py-3 text-amber-100 shadow-2xl">
+                        <LockKeyhole size={18} className="text-amber-400" />
+                        <div>
+                            <div className="text-sm font-bold">Agent UI lock is active</div>
+                            <div className="text-xs text-slate-400">Human editing is paused. This automatically unlocks after five minutes.</div>
+                        </div>
+                        <button
+                            onClick={() => setIsUiLocked(false)}
+                            className="ml-2 flex items-center gap-2 rounded-xl bg-amber-400 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300"
+                        >
+                            <Unlock size={14} />
+                            Unlock
+                        </button>
                     </div>
                 </div>
             )}

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import mermaid from 'mermaid';
+import { sanitizeMermaidSource, sanitizeMermaidSvg } from '../utils/contentSecurity';
 import { CanvasElement } from '../types';
 
 interface MindMapElementProps {
@@ -339,11 +340,12 @@ export const MindMapElement: React.FC<MindMapElementProps> = React.memo(({ eleme
 
   // Initialize Mermaid once globally
   useEffect(() => {
+    isMountedRef.current = true;
     if (!mermaidInitialized) {
       mermaid.initialize({
         startOnLoad: false,
         theme: 'base',
-        securityLevel: 'loose',
+        securityLevel: 'strict',
         themeVariables: {
           // Mindmap root node - light green
           mindmapRoot: '#f7faf7ff',           // emerald-200 (light green)
@@ -356,7 +358,7 @@ export const MindMapElement: React.FC<MindMapElementProps> = React.memo(({ eleme
           mindmap4: '#e0e7ff',              // indigo-100
           mindmap5: '#f3e8ff',              // purple-100
         },
-        flowchart: { useMaxWidth: false, htmlLabels: true, curve: 'basis' },
+        flowchart: { useMaxWidth: false, htmlLabels: false, curve: 'basis' },
         sequence: { useMaxWidth: false, mirrorActors: false },
         journey: { useMaxWidth: false },
         pie: { useMaxWidth: false },
@@ -380,7 +382,7 @@ export const MindMapElement: React.FC<MindMapElementProps> = React.memo(({ eleme
         return cachedFallback;
       }
       // Runtime fix: sanitize AI-generated code for common syntax issues
-      return sanitizeMermaidCode(element.mermaidCode);
+      return sanitizeMermaidSource(sanitizeMermaidCode(element.mermaidCode));
     }
 
     const data = element.mindMapData;
@@ -443,7 +445,7 @@ export const MindMapElement: React.FC<MindMapElementProps> = React.memo(({ eleme
 
       // Extract dimensions and fix SVG for proper display
       const { svg: dimensionFixedSvg, width, height } = extractAndFixSvgDimensions(svg);
-      const fixedSvg = applyTextColorFix(dimensionFixedSvg);
+      const fixedSvg = sanitizeMermaidSvg(applyTextColorFix(dimensionFixedSvg));
 
       addToCache(mermaidSyntax, fixedSvg);
       setSvgContent(fixedSvg);
@@ -475,7 +477,7 @@ export const MindMapElement: React.FC<MindMapElementProps> = React.memo(({ eleme
 
           // Extract dimensions and fix SVG
           const { svg: dimensionFixedSvg, width, height } = extractAndFixSvgDimensions(fallbackSvg);
-          const fixedFallback = applyTextColorFix(dimensionFixedSvg);
+          const fixedFallback = sanitizeMermaidSvg(applyTextColorFix(dimensionFixedSvg));
           setSvgContent(fixedFallback);
           lastRenderedCodeRef.current = fallbackCode;
 

@@ -85,7 +85,7 @@ export const resolveImageReferences = (
   });
 };
 
-export const searchImages = async (query: string): Promise<ImageSearchResult[]> => {
+export const searchImages = async (query: string, signal?: AbortSignal): Promise<ImageSearchResult[]> => {
   const ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY;
 
   if (!ACCESS_KEY) {
@@ -100,6 +100,7 @@ export const searchImages = async (query: string): Promise<ImageSearchResult[]> 
         headers: {
           Authorization: `Client-ID ${ACCESS_KEY}`,
         },
+        signal,
       }
     );
 
@@ -118,6 +119,7 @@ export const searchImages = async (query: string): Promise<ImageSearchResult[]> 
       photographerUrl: result.user.links.html,
     }));
   } catch (error) {
+    if ((error as Error)?.name === 'AbortError') throw error;
     console.error("Error searching images:", error);
     return [];
   }

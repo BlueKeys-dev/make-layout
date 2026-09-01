@@ -30,7 +30,7 @@ export const MathElement: React.FC<MathElementProps> = ({
                 throwOnError: false,
                 displayMode: true,
                 output: 'html',
-                trust: true,
+                trust: false,
                 strict: false,
                 macros: {
                     '\\RR': '\\mathbb{R}',
@@ -44,7 +44,11 @@ export const MathElement: React.FC<MathElementProps> = ({
         } catch (err: any) {
             setError(err.message || 'Invalid LaTeX');
             if (containerRef.current) {
-                containerRef.current.innerHTML = `<span class="text-red-500 text-sm">${formula}</span>`;
+                containerRef.current.replaceChildren();
+                const fallback = document.createElement('span');
+                fallback.className = 'text-red-500 text-sm';
+                fallback.textContent = formula;
+                containerRef.current.appendChild(fallback);
             }
         }
     }, [element.content, isEditing]);
@@ -106,10 +110,14 @@ export const MathElement: React.FC<MathElementProps> = ({
                                         throwOnError: false,
                                         displayMode: false,
                                         strict: false,
-                                        trust: true,
+                                        trust: false,
                                     });
                                 } catch {
-                                    el.innerHTML = `<span class="text-red-400 text-xs">Invalid formula</span>`;
+                                    el.replaceChildren();
+                                    const fallback = document.createElement('span');
+                                    fallback.className = 'text-red-400 text-xs';
+                                    fallback.textContent = 'Invalid formula';
+                                    el.appendChild(fallback);
                                 }
                             }
                         }}

@@ -319,7 +319,8 @@ export const generateLayoutPlan = async (
   canvasConfig: CanvasConfig,
   userPrompt: string,
   imageContext?: string,
-  imageRegistry?: RegisteredImage[]
+  imageRegistry?: RegisteredImage[],
+  signal?: AbortSignal
 ): Promise<LayoutGenerationResult> => {
   const { width, height } = { 
     width: canvasConfig.width * (canvasConfig.isFlipbook ? 2 : 1), 
@@ -388,6 +389,7 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
         responseMimeType: 'application/json',
         responseSchema: layoutResponseSchema,
         systemInstruction: LAYOUT_SYSTEM_PROMPT,
+        abortSignal: signal,
         thinkingConfig: {
             includeThoughts: true,
             thinkingBudget: 46999,
@@ -395,6 +397,7 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
       },
     });
   } catch (error: any) {
+    if (error?.name === 'AbortError') throw error;
     const isRateLimit = error.status === 429 || error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('quota');
     console.error('[LayoutMaker] AI generation failed:', error.message || error);
     throw new Error(isRateLimit 
@@ -762,7 +765,7 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
   // Generate all diagrams in parallel batches
   if (diagramRequests.length > 0) {
     console.log(`[LayoutMaker] Generating ${diagramRequests.length} diagrams in parallel...`);
-    const results = await generateDiagramsBatch(diagramRequests, 2);
+    const results = await generateDiagramsBatch(diagramRequests, 2, signal);
     
     // Apply results to elements
     for (let i = 0; i < results.length; i++) {

@@ -3,6 +3,7 @@ import { ElementType, CanvasElement } from '../types';
 import { createElementFactory } from '../utils/elementRegistry';
 
 interface UseKeysProps {
+    enabled?: boolean;
     selectedIds: string[];
     setSelectedIds: (ids: string[]) => void;
     elements: CanvasElement[];
@@ -19,6 +20,7 @@ interface UseKeysProps {
 }
 
 export const useKeyboardShortcuts = ({
+    enabled = true,
     selectedIds,
     setSelectedIds,
     elements,
@@ -49,6 +51,7 @@ export const useKeyboardShortcuts = ({
 
     useEffect(() => {
         const handleKeyDown = (e: KeyboardEvent) => {
+            if (!enabled) return;
             if ((e.target as HTMLElement).isContentEditable || (e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
             
             const isCtrl = e.ctrlKey || e.metaKey;
@@ -137,6 +140,7 @@ export const useKeyboardShortcuts = ({
         };
 
         const handlePaste = (e: ClipboardEvent) => {
+             if (!enabled) return;
              // Only handle paste if not in an input/textarea
              if ((e.target as HTMLElement).isContentEditable || (e.target as HTMLElement).tagName === 'INPUT' || (e.target as HTMLElement).tagName === 'TEXTAREA') return;
 
@@ -174,6 +178,7 @@ export const useKeyboardShortcuts = ({
 
         // Block browser zoom via Ctrl+Wheel. Canvas zoom is handled in DesignEditor.
         const handleWheel = (e: WheelEvent) => {
+            if (!enabled) return;
             if (e.ctrlKey || e.metaKey) {
                 e.preventDefault();
             }
@@ -188,5 +193,5 @@ export const useKeyboardShortcuts = ({
             window.removeEventListener('paste', handlePaste);
             window.removeEventListener('wheel', handleWheel);
         };
-    }, [deleteSelectedElement, setActiveTool, setIsAddMenuOpen, initiatePlacement, setScale, setElements, setSelectedIds, undo, redo, removeLastPolygonVertex]);
+    }, [enabled, deleteSelectedElement, setActiveTool, setIsAddMenuOpen, initiatePlacement, setScale, setElements, setSelectedIds, undo, redo, removeLastPolygonVertex]);
 };

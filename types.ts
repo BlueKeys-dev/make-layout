@@ -188,6 +188,7 @@ export type LayoutPlan = {
   elements: LayoutPlanElement[];
   reasoning: string;
   status: 'pending' | 'approved' | 'modified' | 'rejected';
+  baseRevision?: number;
 };
 
 export type ChatSession = {

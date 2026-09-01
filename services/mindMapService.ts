@@ -17,7 +17,21 @@ The diagrams should be logically structured, high-contrast, and optimized for bo
 // ══════════════════════════════════════════════════════════════
 
 /** Delay for exponential backoff */
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+  if (signal?.aborted) {
+    reject(signal.reason);
+    return;
+  }
+  const timeout = setTimeout(() => {
+    signal?.removeEventListener('abort', handleAbort);
+    resolve();
+  }, ms);
+  const handleAbort = () => {
+    clearTimeout(timeout);
+    reject(signal?.reason);
+  };
+  signal?.addEventListener('abort', handleAbort, { once: true });
+});
 
 /** Check if error is a rate limit error */
 const isRateLimitError = (error: any): boolean => {
@@ -182,9 +196,10 @@ export interface DiagramGenerationResult {
 }
 
 export const generateMindMapCode = async (
-  userPrompt: string, 
+  userPrompt: string,
   diagramType: DiagramType = 'mindmap',
-  maxRetries: number = 3
+  maxRetries: number = 3,
+  signal?: AbortSignal
 ): Promise<DiagramGenerationResult> => {
   const sanitizedPrompt = sanitizePrompt(userPrompt);
   if (!sanitizedPrompt) {
@@ -197,6 +212,7 @@ export const generateMindMapCode = async (
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
+      signal?.throwIfAborted();
       console.log(`[DiagramService] Attempt ${attempt + 1}/${maxRetries} for type: ${diagramType}`);
 
       // Handle Auto Mode - detect best diagram type
@@ -205,7 +221,7 @@ export const generateMindMapCode = async (
           const autoResponse = await ai.models.generateContent({
             model: modelName,
             contents: { parts: [{ text: `${AUTO_DETECT_PROMPT}\n\nUser Prompt: "${sanitizedPrompt}"` }] },
-            config: { responseMimeType: "application/json" }
+            config: { responseMimeType: "application/json", abortSignal: signal }
           });
           
           const result = JSON.parse(autoResponse.text || '{}');
@@ -236,6 +252,7 @@ IMPORTANT: Return ONLY the raw Mermaid code. No explanations, no markdown, no ba
         config: {
           systemInstruction: BASE_SYSTEM_INSTRUCTION,
           responseMimeType: "text/plain",
+          abortSignal: signal,
         },
       });
 
@@ -254,13 +271,14 @@ IMPORTANT: Return ONLY the raw Mermaid code. No explanations, no markdown, no ba
       return { code: cleanedCode, type: targetType };
 
     } catch (error: any) {
+      if (error?.name === 'AbortError') throw error;
       lastError = error;
       console.warn(`[DiagramService] Attempt ${attempt + 1} failed:`, error.message || error);
 
       if (isRateLimitError(error) && attempt < maxRetries - 1) {
         const waitTime = (attempt + 1) * 15000; // 15s, 30s, 45s
         console.log(`[DiagramService] Rate limited. Waiting ${waitTime / 1000}s before retry...`);
-        await delay(waitTime);
+        await delay(waitTime, signal);
         continue;
       }
 
@@ -301,7 +319,8 @@ export interface BatchDiagramResult {
  */
 export const generateDiagramsBatch = async (
   requests: BatchDiagramRequest[],
-  concurrencyLimit: number = 2
+  concurrencyLimit: number = 2,
+  signal?: AbortSignal,
 ): Promise<BatchDiagramResult[]> => {
   if (!requests.length) return [];
   
@@ -309,13 +328,15 @@ export const generateDiagramsBatch = async (
   
   // Process in batches to respect rate limits
   for (let i = 0; i < requests.length; i += concurrencyLimit) {
+    signal?.throwIfAborted();
     const batch = requests.slice(i, i + concurrencyLimit);
     
     const batchPromises = batch.map(async (req): Promise<BatchDiagramResult> => {
       try {
-        const result = await generateMindMapCode(req.prompt, req.type, 2); // Fewer retries for batch
+        const result = await generateMindMapCode(req.prompt, req.type, 2, signal); // Fewer retries for batch
         return { id: req.id, code: result.code, type: result.type };
       } catch (error: any) {
+        if (error?.name === 'AbortError') throw error;
         console.warn(`[DiagramService] Batch item ${req.id} failed:`, error.message);
         // Return fallback on error
         const fallback = DIAGRAM_CONFIGS[req.type as keyof typeof DIAGRAM_CONFIGS]?.defaultCode || 
@@ -329,7 +350,7 @@ export const generateDiagramsBatch = async (
     
     // Small delay between batches to avoid rate limits
     if (i + concurrencyLimit < requests.length) {
-      await delay(500);
+      await delay(500, signal);
     }
   }
   

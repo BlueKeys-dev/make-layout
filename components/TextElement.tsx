@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { CanvasElement } from '../types';
+import { sanitizeRichText } from '../utils/contentSecurity';
 
 interface TextElementProps {
   element: CanvasElement;
@@ -16,7 +17,7 @@ export const TextElement: React.FC<TextElementProps> = ({ element, onUpdateEleme
   // Set content only when NOT editing AND content hasn't been set yet or element.content changed
   useEffect(() => {
     if (textRef.current && !isEditing) {
-      textRef.current.innerHTML = element.content || '';
+      textRef.current.innerHTML = sanitizeRichText(element.content || '');
       contentSetRef.current = true;
     }
   }, [element.content, isEditing]);
@@ -44,7 +45,8 @@ export const TextElement: React.FC<TextElementProps> = ({ element, onUpdateEleme
 
   const handleBlur = () => {
     if (textRef.current && onUpdateElement) {
-      const newContent = textRef.current.innerHTML;
+      const newContent = sanitizeRichText(textRef.current.innerHTML);
+      textRef.current.innerHTML = newContent;
       onUpdateElement(element.id, { content: newContent });
     }
     setIsEditing(false);
