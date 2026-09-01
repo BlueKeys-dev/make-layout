@@ -11,7 +11,7 @@ import {
   PanelsTopLeft
 } from 'lucide-react';
 import { CanvasConfig, CanvasElement, BoardConfig, LayoutOrientation, LayoutTemplate as LayoutTemplateData } from '../types';
-import { CANVAS_PRESETS } from '../config/canvasDefaults';
+import { CANVAS_PRESETS, DEFAULT_CANVAS_CONFIG } from '../config/canvasDefaults';
 import { LayoutLibrary } from './LayoutLibrary';
 
 interface CanvasSettingsBarProps {
@@ -51,8 +51,8 @@ export const CanvasSettingsBar: React.FC<CanvasSettingsBarProps> = ({
   const currentBg = activeBoard?.boardConfig?.backgroundColor ?? activeBoard?.color ?? config.backgroundColor;
   const currentRadius = activeBoard?.boardConfig?.borderRadius ?? config.borderRadius;
   const currentShowGrid = activeBoard?.boardConfig?.showGrid ?? config.showGrid;
-  const currentShowGuides = activeBoard?.boardConfig?.showGuides ?? config.showGuides;
-  const currentBleed = activeBoard?.boardConfig?.bleed ?? config.bleed;
+  const currentShowGuides = activeBoard?.boardConfig?.showGuides ?? config.showGuides ?? DEFAULT_CANVAS_CONFIG.showGuides;
+  const currentBleed = activeBoard?.boardConfig?.bleed ?? config.bleed ?? DEFAULT_CANVAS_CONFIG.bleed;
   const currentGridRows = activeBoard?.boardConfig?.gridRows ?? config.gridRows;
   const currentGridCols = activeBoard?.boardConfig?.gridCols ?? config.gridCols;
 

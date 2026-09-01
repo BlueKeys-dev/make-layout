@@ -3,6 +3,25 @@ import { P5Generator } from './P5Generator';
 import { InfographicGenerator } from './InfographicGenerator';
 import { P5Data } from '../types';
 
+// --- Session (intro plays once per browser tab session, via toolbar button) ---
+const ANIMATION_HOME_SESSION_KEY = 'make-layout:animation-home-intro-seen';
+
+const hasSeenAnimationHomeIntro = () => {
+  try {
+    return sessionStorage.getItem(ANIMATION_HOME_SESSION_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const markAnimationHomeIntroSeen = () => {
+  try {
+    sessionStorage.setItem(ANIMATION_HOME_SESSION_KEY, '1');
+  } catch {
+    // ignore
+  }
+};
+
 // --- Types ---
 interface ExampleCard {
   title: string;
@@ -350,12 +369,48 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
   const welcomeTextRef = useRef<HTMLHeadingElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const handleClose = useCallback(() => {
+    markAnimationHomeIntroSeen();
+    onClose?.();
+  }, [onClose]);
+
   // --- Geometric Shapes State ---
   const [showShapes, setShowShapes] = useState(true);
   const shapesContainerRef = useRef<HTMLDivElement>(null);
 
+  const applyIntroFinalState = useCallback(() => {
+    setShowShapes(false);
+    requestAnimationFrame(() => {
+      welcomeTextRef.current?.querySelectorAll('.char').forEach((node) => {
+        const el = node as HTMLElement;
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0px) scale(1)';
+        el.style.filter = 'blur(0px)';
+        el.style.textShadow = `0 0 25px ${THEME.secondary}66`;
+      });
+      heroRef.current?.querySelectorAll('.hero-element').forEach((node) => {
+        const el = node as HTMLElement;
+        el.style.opacity = '1';
+        el.style.transform = 'translateY(0px)';
+        el.style.filter = 'blur(0px)';
+      });
+      if (gridRef.current) {
+        Array.from(gridRef.current.children).forEach((node) => {
+          const el = node as HTMLElement;
+          el.style.opacity = '1';
+          el.style.transform = 'translateY(0px) scale(1)';
+        });
+      }
+    });
+  }, []);
+
   // --- GSAP Setup with Organic Absorption Animation ---
   useEffect(() => {
+    if (hasSeenAnimationHomeIntro()) {
+      applyIntroFinalState();
+      return;
+    }
+
     let script: HTMLScriptElement | null = null;
     let tl: any = null;
 
@@ -497,7 +552,8 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
               ease: "expo.out"
             },
             "-=1.2"
-          );
+          )
+          .call(() => markAnimationHomeIntroSeen());
 
         // Continuous organic floating for letters
         gsap.to(chars, {
@@ -700,7 +756,7 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
       const gsap = (window as any).gsap;
       if (gsap) gsap.globalTimeline.clear();
     };
-  }, []);
+  }, [applyIntroFinalState]);
 
   const handleSend = () => {
     if (!prompt || isProcessing) return;
@@ -824,7 +880,7 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
       {/* Close Button */}
       {onClose && (
         <button
-          onClick={onClose}
+          onClick={handleClose}
           aria-label="Close Animation Home"
           className="fixed top-8 right-8 z-[100] group w-12 h-12 flex items-center justify-center rounded-full glass-panel-deep hover:bg-white/10 transition-all duration-300 shadow-xl"
         >

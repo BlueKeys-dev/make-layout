@@ -73,6 +73,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
       onMouseDown={onMouseDown}
+      onContextMenu={(e) => e.preventDefault()}
       onMouseLeave={(e) => {
         if (e.buttons) onMouseUp(e);
       }}

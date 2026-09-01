@@ -60,6 +60,7 @@ export const createElementFactory = (
         color: '#ef601eff', // Indigo 500
         name: shapeType ? shapeType.charAt(0).toUpperCase() + shapeType.slice(1) : 'Shape',
         shapeType: shapeType || 'rectangle',
+        strokeWidth: 1,
         points: points // Assign initial vertex points if provided
       };
 

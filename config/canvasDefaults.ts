@@ -16,11 +16,43 @@ export const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
   isFlipbook: false,
   borderRadius: 0,
   backgroundColor: '#ffffff',
-  bleed: 0,
+  bleed: 9,
   showGuides: true,
   gridRows: 12,
   gridCols: 12,
   showGrid: true
+};
+
+const CANVAS_CONFIG_STORAGE_KEY = 'ai-layout-canvas-config';
+const CANVAS_CONFIG_STORAGE_VERSION = 1;
+
+export const loadCanvasConfig = (): CanvasConfig => {
+  try {
+    const saved = localStorage.getItem(CANVAS_CONFIG_STORAGE_KEY);
+    if (!saved) return { ...DEFAULT_CANVAS_CONFIG };
+    const parsed = JSON.parse(saved) as Partial<CanvasConfig> & { _v?: number };
+    const isLegacy = parsed._v !== CANVAS_CONFIG_STORAGE_VERSION;
+    const { _v: _version, ...stored } = parsed;
+    return {
+      ...DEFAULT_CANVAS_CONFIG,
+      ...stored,
+      bleed: isLegacy || stored.bleed === 0 ? DEFAULT_CANVAS_CONFIG.bleed : (stored.bleed ?? DEFAULT_CANVAS_CONFIG.bleed),
+      showGuides: isLegacy ? DEFAULT_CANVAS_CONFIG.showGuides : (stored.showGuides ?? DEFAULT_CANVAS_CONFIG.showGuides),
+    };
+  } catch {
+    return { ...DEFAULT_CANVAS_CONFIG };
+  }
+};
+
+export const saveCanvasConfig = (config: CanvasConfig) => {
+  try {
+    localStorage.setItem(
+      CANVAS_CONFIG_STORAGE_KEY,
+      JSON.stringify({ ...config, _v: CANVAS_CONFIG_STORAGE_VERSION }),
+    );
+  } catch {
+    // ignore quota errors
+  }
 };
 
 export const getEffectiveDimensions = (config: CanvasConfig) => {

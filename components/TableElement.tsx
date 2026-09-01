@@ -171,10 +171,12 @@ export const TableElement: React.FC<TableElementProps> = ({ element, onUpdateEle
 
     const textColor = element.tableData?.textColor;
 
+    const hasFill = Boolean(element.color);
+
     return (
         <div
             className="w-full h-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 overflow-hidden select-none flex flex-col rounded-[24px] shadow-sm"
-            style={element.color && element.color !== 'transparent' ? { backgroundColor: element.color } : undefined}
+            style={hasFill ? { backgroundColor: element.color } : undefined}
         >
             <div className="w-full h-full grid" style={{
                 gridTemplateColumns: `repeat(${cols}, 1fr)`,
@@ -185,7 +187,7 @@ export const TableElement: React.FC<TableElementProps> = ({ element, onUpdateEle
                     <div
                         key={`h-${c}`}
                         className="bg-slate-100 dark:bg-slate-950 p-0 border-b border-r border-slate-200 dark:border-slate-700 last:border-r-0 flex items-center relative"
-                        style={element.color && element.color !== 'transparent' ? { backgroundColor: element.color } : undefined}
+                        style={hasFill ? { backgroundColor: element.color } : undefined}
                         onDoubleClick={(e) => { e.stopPropagation(); setEditingCell({ r: 0, c }); }}
                     >
                         {editingCell?.r === 0 && editingCell.c === c ? (

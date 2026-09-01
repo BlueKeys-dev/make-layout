@@ -3,7 +3,7 @@ import { Moon, Sun, Crosshair, Trash2, BookOpen, AlertTriangle, X, Info, LockKey
 import { CanvasElement, ElementType, CanvasConfig, ChatMessage, LayoutPlan, AIModelId, LayoutTemplate } from '../types';
 import { INITIAL_ELEMENTS } from '../data';
 import { SECTIONS } from '../data';
-import { DEFAULT_CANVAS_CONFIG, getEffectiveDimensions, getSafeZones } from '../config/canvasDefaults';
+import { DEFAULT_CANVAS_CONFIG, getEffectiveDimensions, getSafeZones, loadCanvasConfig, saveCanvasConfig } from '../config/canvasDefaults';
 import { PropertiesPanel } from './PropertiesPanel';
 import { processChatMessage, quickGenerateLayout } from '../services/chatai';
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction';
@@ -84,10 +84,25 @@ const getInitialViewPosition = () => {
     return { x: -width / 2, y: -height / 2 };
 };
 
+const normalizeContainerBoard = (element: CanvasElement): CanvasElement => {
+    if (element.type !== 'container') return element;
+    return {
+        ...element,
+        boardConfig: {
+            ...element.boardConfig,
+            showGuides: element.boardConfig?.showGuides ?? DEFAULT_CANVAS_CONFIG.showGuides,
+            bleed: element.boardConfig?.bleed ?? DEFAULT_CANVAS_CONFIG.bleed,
+        },
+    };
+};
+
+const normalizePages = (pages: CanvasElement[][]): CanvasElement[][] =>
+    pages.map(page => page.map(normalizeContainerBoard));
+
 const getInitialPages = (): CanvasElement[][] => {
     try {
         const saved = localStorage.getItem('ai-layout-pages');
-        if (saved) return JSON.parse(saved);
+        if (saved) return normalizePages(JSON.parse(saved));
     } catch (e) {
         console.warn('Persistence Error', e);
     }
@@ -133,6 +148,10 @@ export const DesignEditor = () => {
     const [isMindMapGeneratorOpen, setIsMindMapGeneratorOpen] = useState(false);
     const [isP5GeneratorOpen, setIsP5GeneratorOpen] = useState(false);
     const [isAnimationHomeOpen, setIsAnimationHomeOpen] = useState(false);
+
+    const closeAnimationHome = useCallback(() => {
+        setIsAnimationHomeOpen(false);
+    }, []);
     const [ghostPosition, setGhostPosition] = useState<{ x: number, y: number } | null>(null);
     const [placementStart, setPlacementStart] = useState<{ x: number, y: number } | null>(null);
 
@@ -148,7 +167,11 @@ export const DesignEditor = () => {
     const [scale, setScale] = useState(1);
     const [rightPanelCollapsed, setRightPanelCollapsed] = useState(false);
     const [showDocs, setShowDocs] = useState(false);
-    const [canvasConfig, setCanvasConfig] = useState<CanvasConfig>(DEFAULT_CANVAS_CONFIG);
+    const [canvasConfig, setCanvasConfig] = useState<CanvasConfig>(loadCanvasConfig);
+
+    useEffect(() => {
+        saveCanvasConfig(canvasConfig);
+    }, [canvasConfig]);
     const [showCanvasSettings, setShowCanvasSettings] = useState(false);
     const [showPDFViewer, setShowPDFViewer] = useState(false);
 
@@ -1508,6 +1531,7 @@ export const DesignEditor = () => {
                                     gridRows: canvasConfig.gridRows,
                                     gridCols: canvasConfig.gridCols,
                                     showGuides: canvasConfig.showGuides,
+                                    bleed: canvasConfig.bleed,
                                 }
                             };
 
@@ -1640,7 +1664,9 @@ export const DesignEditor = () => {
                                     backgroundColor: '#ffffff',
                                     gridCols: 12,
                                     gridRows: 12,
-                                    showGrid: true
+                                    showGrid: true,
+                                    showGuides: DEFAULT_CANVAS_CONFIG.showGuides,
+                                    bleed: DEFAULT_CANVAS_CONFIG.bleed,
                                 }
                             };
 
@@ -1853,7 +1879,7 @@ export const DesignEditor = () => {
             {/* Animation Home Overlay */}
             {isAnimationHomeOpen && (
                 <div className="fixed inset-0 z-[100] animate-in fade-in duration-300 overflow-y-auto overflow-x-hidden bg-black/90">
-                    <AnimationHome onClose={() => setIsAnimationHomeOpen(false)} />
+                    <AnimationHome onClose={closeAnimationHome} />
                 </div>
             )}
             {/* P5.js Generator Modal */}

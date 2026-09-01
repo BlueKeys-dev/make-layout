@@ -44,6 +44,56 @@ import { fitPointsToBox } from './ShapeLibrary';
 import { isElementLocked } from '../utils/elementRegistry';
 import { assignLayoutSlotRole, markElementAsLayoutSlot, unmarkLayoutSlot } from '../services/layoutTemplates';
 
+const CHECKERBOARD_BG = "url('data:image/svg+xml,%3Csvg xmlns=\"http://www.w3.org/2000/svg\" width=\"8\" height=\"8\" viewBox=\"0 0 8 8\"%3E%3Crect width=\"4\" height=\"4\" fill=\"%23ccc\"/%3E%3Crect x=\"4\" y=\"4\" width=\"4\" height=\"4\" fill=\"%23ccc\"/%3E%3C/svg%3E')";
+
+const getFillColor = (element: CanvasElement) =>
+  element.type === 'text' ? element.textStyle?.color : element.color;
+
+const isTransparentFill = (color: string | undefined) =>
+  color === 'transparent';
+
+const hasNoFill = (element: CanvasElement) => {
+  const color = getFillColor(element);
+  if (element.type === 'text') return !color || color === 'transparent';
+  return isTransparentFill(color);
+};
+
+const getFillLabel = (element: CanvasElement) => {
+  const color = getFillColor(element);
+  if (element.type === 'text' && !color) return 'Auto';
+  if (hasNoFill(element)) return 'None';
+  return color || 'Auto';
+};
+
+const normalizeFillInput = (value: string): string => {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'none' || trimmed.toLowerCase() === 'transparent') {
+    return 'transparent';
+  }
+  return trimmed;
+};
+
+const applyFillColor = (element: CanvasElement, color: string): CanvasElement => {
+  if (element.type === 'text') {
+    return { ...element, textStyle: { ...(element.textStyle || {}), color } };
+  }
+  if (element.type === 'container') {
+    return {
+      ...element,
+      color,
+      boardConfig: { ...(element.boardConfig || {}), backgroundColor: color },
+    };
+  }
+  return { ...element, color };
+};
+
+const clearFillColor = (element: CanvasElement): CanvasElement => {
+  if (element.type === 'text') {
+    return { ...element, textStyle: { ...(element.textStyle || {}), color: undefined } };
+  }
+  return applyFillColor(element, 'transparent');
+};
+
 interface PropertiesPanelProps {
   selectedElement: CanvasElement | undefined;
   selectedIds: string[];
@@ -415,7 +465,7 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                     <span className="text-xs font-semibold text-text-primary-light dark:text-text-primary-dark">Border & Stroke</span>
                   </div>
                   <div className="grid grid-cols-2 gap-2 mb-2">
-                       <NumInput label="Width" value={selectedElement.strokeWidth || 0} onChange={(v) => handleChange('strokeWidth', v)} />
+                       <NumInput label="Width" value={selectedElement.strokeWidth ?? 1} onChange={(v) => handleChange('strokeWidth', v)} />
                   </div>
                   {/* Stroke Color */}
                   <div className="relative">
@@ -539,39 +589,23 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
               <div className="flex items-center gap-1">
                  <button 
                     onClick={() => {
-                       const current = selectedElement.type === 'text' ? selectedElement.textStyle?.color : selectedElement.color;
-                       if (current === 'transparent') {
-                          onUpdateElements(selectedIds, (el) => {
-                             if (el.type === 'text') return { ...el, textStyle: { ...(el.textStyle || {}), color: undefined } };
-                             const val = '#ec5b13';
-                             if (el.type === 'container') return { ...el, color: val, boardConfig: { ...(el.boardConfig || {}), backgroundColor: val } };
-                             return { ...el, color: val };
-                          });
+                       if (hasNoFill(selectedElement)) {
+                          onUpdateElements(selectedIds, (el) => applyFillColor(el, '#ec5b13'));
                        } else {
-                          onUpdateElements(selectedIds, (el) => {
-                             if (el.type === 'text') return { ...el, textStyle: { ...(el.textStyle || {}), color: 'transparent' } };
-                             const val = 'transparent';
-                             if (el.type === 'container') return { ...el, color: val, boardConfig: { ...(el.boardConfig || {}), backgroundColor: val } };
-                             return { ...el, color: val };
-                          });
+                          onUpdateElements(selectedIds, (el) => applyFillColor(el, 'transparent'));
                        }
                     }}
                     className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-text-secondary-light dark:text-text-secondary-dark hover:text-primary"
                     title="Toggle Visibility"
                  >
-                     {((selectedElement.type === 'text' ? selectedElement.textStyle?.color : selectedElement.color) === 'transparent') ? <EyeOff size={14}/> : <Eye size={14}/>}
+                     {hasNoFill(selectedElement) ? <EyeOff size={14}/> : <Eye size={14}/>}
                  </button>
                  <button 
                     onClick={() => {
-                        onUpdateElements(selectedIds, (el) => {
-                           if (el.type === 'text') return { ...el, textStyle: { ...(el.textStyle || {}), color: undefined } };
-                           const val = 'transparent';
-                           if (el.type === 'container') return { ...el, color: val, boardConfig: { ...(el.boardConfig || {}), backgroundColor: val } };
-                           return { ...el, color: val };
-                        });
+                        onUpdateElements(selectedIds, (el) => clearFillColor(el));
                     }}
                     className="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 text-text-secondary-light dark:text-text-secondary-dark hover:text-red-500"
-                    title="Remove Color (Auto)"
+                    title="Remove Color (None)"
                  >
                      <Minus size={14}/>
                  </button>
@@ -584,11 +618,13 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                    className="flex items-center gap-2 p-1.5 rounded bg-gray-50 dark:bg-black/20 border border-transparent hover:border-border-light cursor-pointer group"
                 >
                     <div className="w-5 h-5 rounded border border-gray-200 dark:border-white/10 shadow-sm relative overflow-hidden">
-                       <div className="absolute inset-0 bg-[url('https://checkerboard.cool/checks.png')] opacity-20 bg-repeat bg-[length:4px_4px]"></div>
-                       <div className="absolute inset-0" style={{ backgroundColor: (selectedElement.type === 'text' ? selectedElement.textStyle?.color : selectedElement.color) || 'var(--canvas-text-auto, #000)' }}></div>
+                       <div className="absolute inset-0 opacity-20 bg-repeat bg-[length:4px_4px]" style={{ backgroundImage: CHECKERBOARD_BG }} />
+                       {!hasNoFill(selectedElement) && (
+                         <div className="absolute inset-0" style={{ backgroundColor: getFillColor(selectedElement) }} />
+                       )}
                     </div>
                     <span className="text-xs font-mono flex-1 text-text-secondary-light dark:text-text-secondary-dark group-hover:text-primary truncate">
-                        {(selectedElement.type === 'text' ? selectedElement.textStyle?.color : selectedElement.color) || 'Auto'}
+                        {getFillLabel(selectedElement)}
                     </span>
                     <Palette size={12} className="text-text-secondary-dark opacity-50"/>
                 </div>
@@ -599,18 +635,12 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                            <input 
                               type="color" 
                               value={(() => {
-                                const c = selectedElement.type === 'text' ? selectedElement.textStyle?.color : selectedElement.color;
-                                // Only return hex colors, fallback to black for 'transparent' or invalid values
+                                const c = getFillColor(selectedElement);
                                 if (c && c.startsWith('#') && c.length >= 7) return c.substring(0, 7);
                                 return '#000000';
                               })()}
                               onChange={(e) => {
-                                  const val = e.target.value;
-                                  onUpdateElements(selectedIds, (el) => {
-                                      if (el.type === 'text') return { ...el, textStyle: { ...(el.textStyle || {}), color: val } };
-                                      if (el.type === 'container') return { ...el, color: val, boardConfig: { ...(el.boardConfig || {}), backgroundColor: val } };
-                                      return { ...el, color: val };
-                                  });
+                                  onUpdateElements(selectedIds, (el) => applyFillColor(el, e.target.value));
                               }}
                               className="w-8 h-8 rounded cursor-pointer border-0 p-0" 
                            />
@@ -618,15 +648,11 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                                <label className="text-[10px] uppercase text-text-secondary-dark mb-1 block">Hex</label>
                                <input 
                                   type="text" 
-                                  value={(selectedElement.type === 'text' ? selectedElement.textStyle?.color : selectedElement.color) || ''}
-                                  placeholder="#RRGGBB"
+                                  value={hasNoFill(selectedElement) ? '' : (getFillColor(selectedElement) || '')}
+                                  placeholder="None"
                                   onChange={(e) => {
-                                     const val = e.target.value;
-                                     onUpdateElements(selectedIds, (el) => {
-                                          if (el.type === 'text') return { ...el, textStyle: { ...(el.textStyle || {}), color: val } };
-                                          if (el.type === 'container') return { ...el, color: val, boardConfig: { ...(el.boardConfig || {}), backgroundColor: val } };
-                                          return { ...el, color: val };
-                                     });
+                                     const val = normalizeFillInput(e.target.value);
+                                     onUpdateElements(selectedIds, (el) => applyFillColor(el, val));
                                   }}
                                   className="w-full text-xs bg-gray-50 dark:bg-black/20 border-none rounded px-2 py-1 text-text-primary-light dark:text-text-primary-dark font-mono focus:outline-none focus:ring-1 focus:ring-primary"
                                />
@@ -634,20 +660,26 @@ export const PropertiesPanel: React.FC<PropertiesPanelProps> = ({
                       </div>
                       
                       <div className="grid grid-cols-7 gap-1 mt-2">
+                          <button
+                            type="button"
+                            title="None (transparent)"
+                            className="w-6 h-6 rounded-full border border-gray-200 dark:border-white/10 hover:scale-110 transition-transform relative overflow-hidden"
+                            style={{ backgroundImage: CHECKERBOARD_BG, backgroundSize: '8px 8px' }}
+                            onClick={() => {
+                              onUpdateElements(selectedIds, (el) => applyFillColor(el, 'transparent'));
+                            }}
+                          />
                           {[
                               '#000000', '#ffffff', '#ef4444', '#f97316', '#f59e0b', '#84cc16', '#22c55e',
                               '#10b981', '#06b6d4', '#0ea5e9', '#3b82f6', '#6366f1', '#a855f7', '#d946ef'
                           ].map(c => (
                               <button
                                 key={c}
+                                type="button"
                                 className="w-6 h-6 rounded-full border border-gray-200 dark:border-white/10 hover:scale-110 transition-transform"
                                 style={{ backgroundColor: c }}
                                 onClick={() => {
-                                   onUpdateElements(selectedIds, (el) => {
-                                      if (el.type === 'text') return { ...el, textStyle: { ...(el.textStyle || {}), color: c } };
-                                      if (el.type === 'container') return { ...el, color: c, boardConfig: { ...(el.boardConfig || {}), backgroundColor: c } };
-                                      return { ...el, color: c };
-                                   });
+                                   onUpdateElements(selectedIds, (el) => applyFillColor(el, c));
                                 }}
                               />
                           ))}

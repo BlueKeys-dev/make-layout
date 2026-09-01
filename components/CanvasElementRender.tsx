@@ -13,6 +13,17 @@ import { SHAPES, fitPointsToBox } from './ShapeLibrary';
 import { ShapeType } from '../types';
 import { isElementLocked } from '../utils/elementRegistry';
 
+const resolveSvgFill = (color?: string) => {
+  if (!color || color === 'transparent') return 'transparent';
+  if (color.startsWith('#') || color.startsWith('rgb')) return color;
+  return 'currentColor';
+};
+
+const resolveTailwindColorClass = (color?: string) => {
+  if (!color || color === 'transparent' || color.startsWith('#') || color.startsWith('rgb')) return '';
+  return color;
+};
+
 interface CanvasElementRenderProps {
   element: CanvasElement;
   isSelected: boolean;
@@ -203,10 +214,10 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
               >
                 <path
                   d={pathData}
-                  fill={element.color?.startsWith('#') || element.color?.startsWith('rgb') ? element.color : 'currentColor'}
-                  className={!element.color?.startsWith('#') && !element.color?.startsWith('rgb') ? element.color : ''}
+                  fill={resolveSvgFill(element.color)}
+                  className={resolveTailwindColorClass(element.color)}
                   stroke={element.strokeColor || 'none'}
-                  strokeWidth={element.strokeWidth || 0}
+                  strokeWidth={element.strokeWidth ?? 1}
                   vectorEffect="non-scaling-stroke"
                 />
               </svg>
@@ -289,7 +300,7 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
 
         // Grid color should contrast with background - use subtle opacity for elegance
         const isLightBg = () => {
-          if (!bgColor) return true;
+          if (!bgColor || !bgColor.startsWith('#')) return true;
           let hex = bgColor.replace('#', '');
           if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
           const r = parseInt(hex.substring(0, 2), 16) || 0;
