@@ -5,6 +5,7 @@ import { generateLayoutPlan, validateLayout } from './layout_maker';
 import { searchImages, ImageSearchResult } from './imageService';
 import { generateMindMapCode } from './mindMapService';
 import { CANVAS_TOOL_CATALOG, CanvasToolName } from './canvasToolCatalog';
+import { createContainerBoard } from '../utils/elementRegistry';
 import {
   assignLayoutSlotRole,
   getLayoutTemplates,
@@ -124,7 +125,19 @@ const compactElement = (element: CanvasElement) => {
   } else if (element.type === 'image') {
     summary.image = compactUrl(element.src);
   } else if (element.type === 'shape') {
-    summary.shape = { shapeType: element.shapeType || 'rectangle', color: element.color?.slice(0, 64), strokeColor: element.strokeColor?.slice(0, 64), strokeWidth: element.strokeWidth };
+    summary.shape = {
+      shapeType: element.shapeType || 'rectangle',
+      color: element.color?.slice(0, 64),
+      strokeColor: element.strokeColor?.slice(0, 64),
+      strokeWidth: element.strokeWidth,
+      pointCount: element.points?.length || 0,
+    };
+  } else if (element.type === 'path') {
+    summary.path = {
+      pointCount: element.points?.length || 0,
+      strokeColor: element.strokeColor?.slice(0, 64),
+      strokeWidth: element.strokeWidth,
+    };
   } else if (element.type === 'table' && element.tableData) {
     summary.table = { rows: element.tableData.rows, cols: element.tableData.cols, headers: element.tableData.headers.slice(0, 10).map(value => value.slice(0, 80)) };
   } else if (element.type === 'mindmap') {
@@ -132,8 +145,94 @@ const compactElement = (element: CanvasElement) => {
   } else if (element.type === 'math') {
     const formula = element.content || '';
     summary.math = { preview: formula.slice(0, 160), truncated: formula.length > 160 };
+  } else if (element.type === 'p5' && element.p5Data) {
+    summary.sketch = {
+      topic: element.p5Data.topic?.slice(0, 160),
+      modelUsed: element.p5Data.modelUsed,
+      codeLength: element.p5Data.code.length,
+    };
+  } else if (element.type === 'geogebra' && element.geogebraData) {
+    summary.geogebra = {
+      topic: element.geogebraData.topic?.slice(0, 160),
+      appType: element.geogebraData.appType,
+      codeLength: element.geogebraData.code.length,
+      hasSavedState: Boolean(element.geogebraData.base64State),
+    };
+  } else if (element.type === 'figure') {
+    const caption = richTextToPlainText(element.content || '');
+    summary.figure = { preview: caption.slice(0, 160), truncated: caption.length > 160 };
   }
   return summary;
+};
+
+type BoardBounds = { x: number; y: number; width: number; height: number };
+type BoardSummary = {
+  id: string;
+  name: string;
+  isPrimary: boolean;
+  active: boolean;
+  bounds: BoardBounds;
+  config: Record<string, unknown>;
+};
+
+const containsPoint = (bounds: BoardBounds, x: number, y: number) =>
+  x >= bounds.x && x <= bounds.x + bounds.width && y >= bounds.y && y <= bounds.y + bounds.height;
+
+const fullyContainsElement = (bounds: BoardBounds, element: CanvasElement) =>
+  element.x >= bounds.x
+  && element.y >= bounds.y
+  && element.x + element.w <= bounds.x + bounds.width
+  && element.y + element.h <= bounds.y + bounds.height;
+
+const getBoardState = (context: CanvasToolExecutionContext) => {
+  const effectiveWidth = context.canvasConfig.isFlipbook ? context.canvasConfig.width * 2 : context.canvasConfig.width;
+  const primaryBounds = { x: 0, y: 0, width: effectiveWidth, height: context.canvasConfig.height };
+  const primary: BoardSummary = {
+    id: 'primary',
+    name: 'Main Board',
+    isPrimary: true,
+    active: context.activeBoardId === null,
+    bounds: primaryBounds,
+    config: {
+      backgroundColor: context.canvasConfig.backgroundColor,
+      borderRadius: context.canvasConfig.borderRadius,
+      showGrid: context.canvasConfig.showGrid,
+      gridRows: context.canvasConfig.gridRows,
+      gridCols: context.canvasConfig.gridCols,
+      showGuides: context.canvasConfig.showGuides,
+      bleed: context.canvasConfig.bleed,
+    },
+  };
+  const secondaryElements = context.elements.filter(element => element.type === 'container');
+  const secondary = secondaryElements.map(element => ({
+    id: element.id,
+    name: element.name.slice(0, 120),
+    isPrimary: false,
+    active: context.activeBoardId === element.id,
+    bounds: { x: element.x, y: element.y, width: element.w, height: element.h },
+    config: {
+      backgroundColor: element.boardConfig?.backgroundColor || element.color,
+      borderRadius: element.boardConfig?.borderRadius,
+      showGrid: element.boardConfig?.showGrid,
+      gridRows: element.boardConfig?.gridRows,
+      gridCols: element.boardConfig?.gridCols,
+      showGuides: element.boardConfig?.showGuides,
+      bleed: element.boardConfig?.bleed,
+    },
+  } satisfies BoardSummary));
+  const boards = [primary, ...secondary];
+  const objectsByBoard = new Map(boards.map(board => [board.id, [] as CanvasElement[]]));
+
+  for (const element of context.elements) {
+    if (element.type === 'container') continue;
+    const centerX = element.x + element.w / 2;
+    const centerY = element.y + element.h / 2;
+    const owner = [...secondary].reverse().find(board => containsPoint(board.bounds, centerX, centerY))
+      || (containsPoint(primaryBounds, centerX, centerY) ? primary : undefined);
+    if (owner) objectsByBoard.get(owner.id)?.push(element);
+  }
+
+  return { boards, objectsByBoard };
 };
 
 const boundedPage = (base: Record<string, unknown>, items: Record<string, unknown>[], offset: number) => {
@@ -255,6 +354,52 @@ export const executeCanvasTool = async (
       };
     }
 
+    if (tool === 'list_boards') {
+      const { offset, limit } = readWindow(input);
+      const { boards, objectsByBoard } = getBoardState(context);
+      const items = boards.slice(offset, offset + limit).map(board => ({
+        ...board,
+        objectCount: objectsByBoard.get(board.id)?.length || 0,
+      }));
+      return {
+        success: true,
+        tool,
+        message: `Read ${items.length} canvas boards.`,
+        data: boundedPage({
+          revision: context.revision,
+          page: { index: context.currentPage, count: context.pageCount },
+          total: boards.length,
+          offset,
+        }, items, offset),
+      };
+    }
+
+    if (tool === 'inspect_board') {
+      const boardId = text(input.boardId, 'boardId', 160);
+      const { offset, limit } = readWindow(input);
+      const { boards, objectsByBoard } = getBoardState(context);
+      const board = boards.find(candidate => candidate.id === boardId);
+      if (!board) {
+        return fail(tool, 'BOARD_NOT_FOUND', `No board named "${boardId}" exists. Call list_boards and retry with one returned id.`, 'boardId');
+      }
+      const objects = objectsByBoard.get(board.id) || [];
+      const items = objects.slice(offset, offset + limit).map(element => ({
+        ...compactElement(element),
+        partiallyOutside: !fullyContainsElement(board.bounds, element),
+      }));
+      return {
+        success: true,
+        tool,
+        message: `Inspected ${items.length} objects in ${board.name}.`,
+        data: boundedPage({
+          revision: context.revision,
+          board,
+          total: objects.length,
+          offset,
+        }, items, offset),
+      };
+    }
+
     if (tool === 'list_layout_templates') {
       const { offset, limit } = readWindow(input);
       const library = getLayoutTemplates();
@@ -346,6 +491,55 @@ export const executeCanvasTool = async (
 
     const expected = validateMutation(tool, input, context);
     if (typeof expected !== 'number') return expected;
+
+    if (tool === 'add_board') {
+      const effectiveWidth = context.canvasConfig.isFlipbook ? context.canvasConfig.width * 2 : context.canvasConfig.width;
+      const rightmost = context.elements.length > 0
+        ? Math.max(...context.elements.map(element => element.x + element.w))
+        : 0;
+      const x = input.x === undefined
+        ? (rightmost > 0 ? rightmost + 100 : effectiveWidth + 100)
+        : number(input.x, 'x');
+      const y = input.y === undefined ? 0 : number(input.y, 'y');
+      const width = input.width === undefined ? effectiveWidth : number(input.width, 'width', 0.1);
+      const height = input.height === undefined ? context.canvasConfig.height : number(input.height, 'height', 0.1);
+      const backgroundColor = input.backgroundColor === undefined
+        ? '#ffffff'
+        : text(input.backgroundColor, 'backgroundColor', 64);
+      const secondaryBoardCount = context.elements.filter(element => element.type === 'container').length;
+      const name = input.name === undefined ? `Board ${secondaryBoardCount + 2}` : text(input.name, 'name', 120);
+      const board = createContainerBoard({
+        name,
+        x,
+        y,
+        w: width,
+        h: height,
+        color: backgroundColor,
+        boardConfig: {
+          backgroundColor,
+          borderRadius: context.canvasConfig.borderRadius,
+          showGrid: context.canvasConfig.showGrid,
+          gridRows: context.canvasConfig.gridRows,
+          gridCols: context.canvasConfig.gridCols,
+          showGuides: context.canvasConfig.showGuides,
+          bleed: context.canvasConfig.bleed,
+        },
+      });
+      return {
+        success: true,
+        tool,
+        message: `Added board ${board.name}.`,
+        data: {
+          board: {
+            id: board.id,
+            name: board.name,
+            bounds: { x: board.x, y: board.y, width: board.w, height: board.h },
+            config: board.boardConfig,
+          },
+        },
+        effects: { expectedRevision: expected, elementToAdd: board },
+      };
+    }
 
     if (tool === 'load_layout_template') {
       const templateId = text(input.templateId, 'templateId', 160);

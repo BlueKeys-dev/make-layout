@@ -37,7 +37,7 @@ Last updated: 2026-09-02
 ## Agent tools
 
 - `services/canvasToolCatalog.ts` is the single WebMCP/chat tool schema catalog.
-- `services/canvasToolEngine.ts` validates and executes tool requests. `load_layout_template` resolves `activeBoardId` and returns `layoutElementsToAdd`.
+- `services/canvasToolEngine.ts` validates and executes tool requests. It owns bounded board listing and inspection, center-point object ownership, and board/layout tool outcomes.
 - `services/webmcp.ts` registers catalog tools and serializes mutations.
 - `hooks/useDesignEditorWebMcp.ts` validates confirmations and revision/UI-lock state, derives one next canvas snapshot, and commits each tool write once through `useCanvasPages`.
 
@@ -57,5 +57,5 @@ Last updated: 2026-09-02
 
 - Board/layout behavior: start with `hooks/useCanvasInsertions.ts`, `utils/canvasPlacement.ts`, and `services/layoutTemplates.ts`.
 - Interactive element placement: start with `hooks/useCanvasPlacement.ts`.
-- Agent layout behavior: also inspect `services/canvasToolCatalog.ts`, `services/canvasToolEngine.ts`, and `services/webmcp.ts`.
+- Agent board/layout behavior: inspect `services/canvasToolCatalog.ts`, `services/canvasToolEngine.ts`, and `services/webmcp.ts`.
 - Element rendering failures: start with `components/CanvasElementRender.tsx`, then the type-specific renderer and `utils/contentSecurity.ts`.

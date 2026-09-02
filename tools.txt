@@ -41,6 +41,48 @@ The lock has a visible human Unlock button and expires after five minutes. Read 
 - Does: captures the active page as semantic data: revision, canvas dimensions, selection, active board, lock state, and bounded element metadata.
 - Returns: a paginated snapshot with `revision` and `nextOffset`; omits raw HTML, data URLs, and full Mermaid source.
 
+## `list_boards`
+
+- Mode: read-only; untrusted output
+- Input: optional `offset` and `limit` (maximum 10).
+- Does: lists the main board as `primary` and every secondary board with bounds, configuration, active state, and object count.
+- Returns: revision, page metadata, and a paginated board summary.
+
+## `inspect_board`
+
+- Mode: read-only; untrusted output
+- Input: `boardId`, plus optional `offset` and `limit` (maximum 10).
+- Does: returns semantic details for objects owned by one board. Objects are assigned by center point; secondary boards take priority over the main board.
+- Returns: board metadata, paginated object summaries, and `partiallyOutside` for objects crossing the board boundary. Raw HTML, data URLs, Mermaid source, and executable code are omitted.
+
+## `list_layout_templates`
+
+- Mode: read-only
+- Input: optional `offset` and `limit` (maximum 10).
+- Does: lists built-in and locally saved reusable layouts with orientation and slot-count summaries.
+- Returns: a paginated template summary.
+
+## `get_layout_template`
+
+- Mode: read-only
+- Input: `templateId` from `list_layout_templates`.
+- Does: returns normalized slot geometry for one template without changing the canvas.
+- Returns: template metadata and bounded slot details.
+
+## `load_layout_template`
+
+- Mode: canvas write; requires UI lock
+- Input: `templateId` and `expectedRevision`.
+- Does: appends empty layout slots to the active board, or the main board when no secondary board is active.
+- Returns: target board, created slot summaries, and new revision.
+
+## `set_layout_slot_role`
+
+- Mode: canvas write; requires UI lock
+- Input: `elementId`, `role`, `expectedRevision`, and optional `replaceContent` after explicit approval.
+- Does: assigns text, image, table, math, or diagram content to an existing layout slot while preserving its ID and bounds.
+- Returns: the updated slot and new revision.
+
 ## `set_ui_lock`
 
 - Mode: UI write
@@ -54,6 +96,13 @@ The lock has a visible human Unlock button and expires after five minutes. Read 
 - Input: `query` (1–200 characters).
 - Does: searches the configured licensed-image provider and shows results in the visible chat panel.
 - Returns: a bounded result count and compact metadata for up to three images.
+
+## `add_board`
+
+- Mode: canvas write; requires UI lock
+- Input: `expectedRevision`, plus optional `name`, absolute `x`/`y`, `width`, `height`, and `backgroundColor`.
+- Does: adds and selects a secondary board. Omitted geometry uses the main-canvas size and a safe position to the right of existing content.
+- Returns: created board ID, bounds, configuration, and new revision.
 
 ## `add_element`
 

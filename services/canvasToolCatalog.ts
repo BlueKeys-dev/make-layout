@@ -5,12 +5,15 @@ export type CanvasToolName =
   | 'describe_tools'
   | 'get_canvas_text'
   | 'capture_canvas'
+  | 'list_boards'
+  | 'inspect_board'
   | 'list_layout_templates'
   | 'get_layout_template'
   | 'load_layout_template'
   | 'set_layout_slot_role'
   | 'set_ui_lock'
   | 'search_internet_images'
+  | 'add_board'
   | 'add_element'
   | 'add_table'
   | 'add_math'
@@ -95,6 +98,36 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
     },
     annotations: { readOnlyHint: true, untrustedContentHint: true },
     chatCallable: true,
+  },
+  {
+    name: 'list_boards',
+    title: 'List canvas boards',
+    description: 'Lists the main board and secondary boards on the active page with bounded geometry, configuration, active state, and object counts.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        offset: { type: 'integer', minimum: 0, default: 0, description: 'Zero-based board offset.' },
+        limit: { type: 'integer', minimum: 1, maximum: 10, default: 5, description: 'Maximum boards returned.' },
+      },
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
+  },
+  {
+    name: 'inspect_board',
+    title: 'Inspect canvas board',
+    description: 'Returns bounded semantic details for objects owned by one board. Use list_boards to obtain a board id.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['boardId'],
+      properties: {
+        boardId: { type: 'string', minLength: 1, maxLength: 160, description: 'Board id returned by list_boards. Use primary for the main board.' },
+        offset: { type: 'integer', minimum: 0, default: 0, description: 'Zero-based object offset.' },
+        limit: { type: 'integer', minimum: 1, maximum: 10, default: 5, description: 'Maximum objects returned.' },
+      },
+    },
+    annotations: { readOnlyHint: true, untrustedContentHint: true },
   },
   {
     name: 'list_layout_templates',
@@ -182,6 +215,26 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
     },
     annotations: { readOnlyHint: false, untrustedContentHint: true },
     chatCallable: true,
+  },
+  {
+    name: 'add_board',
+    title: 'Add canvas board',
+    description: 'Adds and selects one secondary board using optional absolute geometry or safe defaults. Lock the UI and capture the canvas first.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['expectedRevision'],
+      properties: {
+        expectedRevision,
+        name: { type: 'string', minLength: 1, maxLength: 120, description: 'Optional board name. Defaults to the next Board N name.' },
+        x: coordinate('Optional absolute left position. Defaults to a safe position right of existing content.'),
+        y: coordinate('Optional absolute top position. Defaults to zero.'),
+        width: { type: 'number', exclusiveMinimum: 0, maximum: 100000, description: 'Optional board width. Defaults to the effective main-canvas width.' },
+        height: { type: 'number', exclusiveMinimum: 0, maximum: 100000, description: 'Optional board height. Defaults to the main-canvas height.' },
+        backgroundColor: { type: 'string', minLength: 1, maxLength: 64, description: 'Optional CSS background color. Defaults to white.' },
+      },
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: true },
   },
   {
     name: 'add_element',
