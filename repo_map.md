@@ -1,6 +1,10 @@
 # Repository Map
 
-Last updated: 2026-09-01
+Last updated: 2026-09-02
+
+## Contributor documentation
+
+- `AGENTS.md` describes the repository structure, local commands, coding style, testing approach, and contribution expectations.
 
 ## Application entry and state
 
