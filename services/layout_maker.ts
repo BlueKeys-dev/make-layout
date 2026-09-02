@@ -847,42 +847,59 @@ export const chatWithLayoutAI = async (
   return text || 'I understand. How would you like to proceed with the layout?';
 };
 
+export type LayoutValidationFocus = 'overlaps' | 'spacing' | 'balance' | 'readability' | 'all';
+
 export const validateLayout = (
   elements: LayoutPlanElement[],
   canvasWidth: number,
-  canvasHeight: number
+  canvasHeight: number,
+  focusArea: LayoutValidationFocus = 'all',
 ): { isValid: boolean; issues: string[] } => {
   const issues: string[] = [];
   const { MARGIN, MIN_SPACING, MIN_TEXT_WIDTH } = LAYOUT_CONSTANTS;
+  const includes = (area: Exclude<LayoutValidationFocus, 'all'>) => focusArea === 'all' || focusArea === area;
 
   for (const el of elements) {
-    // Boundary check
-    if (el.x < MARGIN) issues.push(`${el.name}: Too close to left edge (x=${el.x})`);
-    if (el.y < MARGIN) issues.push(`${el.name}: Too close to top edge (y=${el.y})`);
-    if (el.x + el.w > canvasWidth - MARGIN) issues.push(`${el.name}: Exceeds right boundary`);
-    if (el.y + el.h > canvasHeight - MARGIN) issues.push(`${el.name}: Exceeds bottom boundary`);
+    if (includes('balance')) {
+      if (el.x < 0) issues.push(`${el.name}: Exceeds left boundary`);
+      if (el.y < 0) issues.push(`${el.name}: Exceeds top boundary`);
+      if (el.x + el.w > canvasWidth) issues.push(`${el.name}: Exceeds right boundary`);
+      if (el.y + el.h > canvasHeight) issues.push(`${el.name}: Exceeds bottom boundary`);
+    }
 
-    // Text width check
-    if (el.type === 'text' && el.w < MIN_TEXT_WIDTH) {
+    if (includes('spacing')) {
+      if (el.x >= 0 && el.x < MARGIN) issues.push(`${el.name}: Too close to left edge (x=${el.x})`);
+      if (el.y >= 0 && el.y < MARGIN) issues.push(`${el.name}: Too close to top edge (y=${el.y})`);
+      if (el.x + el.w <= canvasWidth && el.x + el.w > canvasWidth - MARGIN) issues.push(`${el.name}: Too close to right edge`);
+      if (el.y + el.h <= canvasHeight && el.y + el.h > canvasHeight - MARGIN) issues.push(`${el.name}: Too close to bottom edge`);
+    }
+
+    if (includes('readability') && el.type === 'text' && el.w < MIN_TEXT_WIDTH) {
       issues.push(`${el.name}: Text container too narrow (${el.w}pt < ${MIN_TEXT_WIDTH}pt)`);
     }
   }
 
-  // Overlap detection
   for (let i = 0; i < elements.length; i++) {
     for (let j = i + 1; j < elements.length; j++) {
       const a = elements[i];
       const b = elements[j];
-      
-      const overlap = !(
+      const overlaps = !(
+        a.x + a.w <= b.x ||
+        b.x + b.w <= a.x ||
+        a.y + a.h <= b.y ||
+        b.y + b.h <= a.y
+      );
+      const tooClose = !(
         a.x + a.w + MIN_SPACING <= b.x ||
         b.x + b.w + MIN_SPACING <= a.x ||
         a.y + a.h + MIN_SPACING <= b.y ||
         b.y + b.h + MIN_SPACING <= a.y
       );
 
-      if (overlap) {
+      if (includes('overlaps') && overlaps) {
         issues.push(`OVERLAP: ${a.name} and ${b.name}`);
+      } else if (includes('spacing') && tooClose) {
+        issues.push(`SPACING: ${a.name} and ${b.name} are less than ${MIN_SPACING}pt apart`);
       }
     }
   }

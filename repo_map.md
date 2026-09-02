@@ -1,6 +1,6 @@
 # Repository Map
 
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 ## Contributor documentation
 
@@ -37,7 +37,8 @@ Last updated: 2026-09-02
 ## Agent tools
 
 - `services/canvasToolCatalog.ts` is the single WebMCP/chat tool schema catalog.
-- `services/canvasToolEngine.ts` validates and executes tool requests. It owns bounded board listing and inspection, center-point object ownership, and board/layout tool outcomes.
+- `services/canvasToolEngine.ts` validates and executes tool requests. It owns bounded board listing and inspection, center-point object ownership, and board-local deterministic layout analysis.
+- `services/layout_maker.ts` owns generated layout plans and the focus-filtered deterministic checks used by layout analysis.
 - `services/webmcp.ts` registers catalog tools and serializes mutations.
 - `hooks/useDesignEditorWebMcp.ts` validates confirmations and revision/UI-lock state, derives one next canvas snapshot, and commits each tool write once through `useCanvasPages`.
 
@@ -52,6 +53,11 @@ Last updated: 2026-09-02
 - Editor pages persist in browser local storage from `components/DesignEditor.tsx`.
 - User layout templates persist separately through `services/layoutTemplates.ts`.
 - `utils/exportUtils.ts` exports PNG, PDF, PPTX, and project JSON; unassigned layout-slot guides are removed from visual exports.
+
+## Focused tests
+
+- `services/layoutTemplates.test.ts` covers reusable layout instantiation and slot-role replacement.
+- `services/canvasToolEngine.test.ts` covers board-local deterministic analysis, container exclusion, and focus filtering.
 
 ## Change-routing rule
 

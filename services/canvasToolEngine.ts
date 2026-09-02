@@ -2,6 +2,7 @@ import { CanvasConfig, CanvasElement, LayoutPlan, LayoutRole, ShapeType } from '
 import { DiagramType, DIAGRAM_CONFIGS } from '../types/diagramTypes';
 import { richTextToPlainText, sanitizeMermaidSource, sanitizeRichText } from '../utils/contentSecurity';
 import { generateLayoutPlan, validateLayout } from './layout_maker';
+import type { LayoutValidationFocus } from './layout_maker';
 import { searchImages, ImageSearchResult } from './imageService';
 import { generateMindMapCode } from './mindMapService';
 import { CANVAS_TOOL_CATALOG, CanvasToolName } from './canvasToolCatalog';
@@ -476,13 +477,42 @@ export const executeCanvasTool = async (
     }
 
     if (tool === 'analyze_current_layout' || tool === 'suggest_improvements') {
-      const layoutElements = context.elements.map(element => ({ ...element, description: 'Existing canvas element' }));
-      const analysis = validateLayout(layoutElements as any, context.canvasConfig.width, context.canvasConfig.height);
-      const issues = analysis.issues.slice(0, 5).map(issue => issue.slice(0, 140));
+      const focusArea = tool === 'analyze_current_layout'
+        ? text(input.focusArea, 'focusArea', 40) as LayoutValidationFocus
+        : 'all';
+      if (tool === 'analyze_current_layout' && !['overlaps', 'spacing', 'balance', 'readability', 'all'].includes(focusArea)) {
+        throw new Error('focusArea is not supported.');
+      }
+      const { boards, objectsByBoard } = getBoardState(context);
+      const boardAnalyses = boards.map(board => {
+        const layoutElements = (objectsByBoard.get(board.id) || []).map(element => ({
+          ...element,
+          x: element.x - board.bounds.x,
+          y: element.y - board.bounds.y,
+          description: 'Existing canvas element',
+        }));
+        const analysis = validateLayout(
+          layoutElements as any,
+          board.bounds.width,
+          board.bounds.height,
+          focusArea,
+        );
+        return analysis.issues.map(issue => `${board.name}: ${issue}`);
+      });
+      const allIssues = boardAnalyses.flat();
+      const issues = allIssues.slice(0, 5).map(issue => issue.slice(0, 140));
       if (tool === 'analyze_current_layout') {
-        const focusArea = text(input.focusArea, 'focusArea', 40);
-        if (!['overlaps', 'spacing', 'balance', 'readability', 'all'].includes(focusArea)) throw new Error('focusArea is not supported.');
-        return { success: true, tool, message: analysis.isValid ? 'No deterministic layout issues found.' : `Found ${analysis.issues.length} layout issues.`, data: { focusArea, isValid: analysis.isValid, issueCount: analysis.issues.length, issues } };
+        return {
+          success: true,
+          tool,
+          message: allIssues.length === 0 ? 'No deterministic layout issues found.' : `Found ${allIssues.length} layout issues.`,
+          data: {
+            focusArea,
+            isValid: allIssues.length === 0,
+            issueCount: allIssues.length,
+            issues,
+          },
+        };
       }
       const improvementType = text(input.improvementType, 'improvementType', 40);
       if (!['spacing', 'alignment', 'hierarchy', 'balance', 'typography'].includes(improvementType)) throw new Error('improvementType is not supported.');
