@@ -11,7 +11,7 @@ Last updated: 2026-09-02
 
 - `index.tsx` mounts the React application.
 - `App.tsx` loads the editor shell.
-- `components/DesignEditor.tsx` owns pages, current-page elements, selection, active board, history, canvas configuration, layout-library actions, and the WebMCP bridge.
+- `components/DesignEditor.tsx` composes editor state and delegates page history, placement, insertions, layout-library actions, and WebMCP writes to focused hooks.
 - `DesignEditor` initializes the world translation at negative half the primary board dimensions so the main board opens centered without forcing later recentering.
 - `hooks/useHistory.ts` stores undo/redo snapshots for the page array.
 - `hooks/useCanvasInteraction.ts` owns selection, dragging, and resize interactions.
@@ -55,6 +55,7 @@ Last updated: 2026-09-02
 
 ## Change-routing rule
 
-- Board/layout behavior: start with `components/DesignEditor.tsx` and `services/layoutTemplates.ts`.
+- Board/layout behavior: start with `hooks/useCanvasInsertions.ts`, `utils/canvasPlacement.ts`, and `services/layoutTemplates.ts`.
+- Interactive element placement: start with `hooks/useCanvasPlacement.ts`.
 - Agent layout behavior: also inspect `services/canvasToolCatalog.ts`, `services/canvasToolEngine.ts`, and `services/webmcp.ts`.
 - Element rendering failures: start with `components/CanvasElementRender.tsx`, then the type-specific renderer and `utils/contentSecurity.ts`.

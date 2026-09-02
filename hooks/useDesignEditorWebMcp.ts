@@ -71,11 +71,11 @@ export const useDesignEditorWebMcp = ({
   addChatMessage,
 }: UseDesignEditorWebMcpOptions) => {
   const registrationEpochRef = useRef(0);
-  const applyOutcomeRef = useRef<(
+  const applyOutcomeRef = useRef<((
     outcome: CanvasToolOutcome,
     signal: AbortSignal,
     announce: boolean,
-  ) => Promise<CanvasToolApplyResult>>();
+  ) => Promise<CanvasToolApplyResult>) | null>(null);
 
   const applyCanvasToolOutcome = useCallback(async (
     outcome: CanvasToolOutcome,
@@ -220,21 +220,7 @@ export const useDesignEditorWebMcp = ({
     if (effects.pendingPlan) setPendingPlan(effects.pendingPlan);
     if (announce) addChatMessage('system', outcome.message, effects.pendingPlan, effects.imageSearchResults);
 
-    await new Promise<void>((resolve, reject) => {
-      if (signal.aborted) {
-        reject(signal.reason);
-        return;
-      }
-      const frame = requestAnimationFrame(() => {
-        signal.removeEventListener('abort', handleAbort);
-        resolve();
-      });
-      const handleAbort = () => {
-        cancelAnimationFrame(frame);
-        reject(signal.reason);
-      };
-      signal.addEventListener('abort', handleAbort, { once: true });
-    });
+    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
 
     return { success: true, revision: canvasRevisionRef.current };
   }, [

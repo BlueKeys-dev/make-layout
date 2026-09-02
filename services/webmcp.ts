@@ -85,6 +85,7 @@ export const registerDesignTools = async (bridge: CanvasToolBridge, lifecycleCon
             const signal = combineAbortSignals(executionSignal, lifecycleController.signal);
             signal.throwIfAborted();
             const outcome = await executeCanvasTool(entry.name, input, bridge.getContext(), signal);
+            let committed = false;
             if (outcome.success && outcome.effects) {
               const applied = await bridge.applyOutcome(outcome, signal);
               if (!applied.success) {
@@ -96,8 +97,9 @@ export const registerDesignTools = async (bridge: CanvasToolBridge, lifecycleCon
                 });
               }
               outcome.data = { ...outcome.data, revision: applied.revision };
+              committed = true;
             }
-            signal.throwIfAborted();
+            if (!committed) signal.throwIfAborted();
             return fitOutputBudget({
               success: outcome.success,
               tool: outcome.tool,

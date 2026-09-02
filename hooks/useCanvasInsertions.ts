@@ -137,7 +137,10 @@ export const useCanvasInsertions = ({
   }, [activeBoardId, closeP5Generator, elements, logicalHeight, logicalWidth, setElements, setSelectedIds]);
 
   const handleAddBoard = useCallback(() => {
-    const boardX = getNextBoardX(elements, logicalWidth + 100);
+    const rightmost = elements.length > 0
+      ? Math.max(...elements.map(element => element.x + element.w))
+      : 0;
+    const boardX = rightmost > 0 ? rightmost + 100 : logicalWidth + 100;
     const board = createContainerBoard({
       name: `Board ${elements.filter(element => element.type === 'container').length + 2}`,
       x: boardX,
