@@ -5,6 +5,7 @@ import type { CanvasToolOutcome } from '../services/canvasToolEngine';
 import { registerDesignTools } from '../services/webmcp';
 import type { CanvasToolApplyResult } from '../services/webmcp';
 import type { SetCanvasElements } from './useCanvasPages';
+import { getNextElementZIndex, placeElementAtViewportCenter } from '../utils/canvasPlacement';
 
 type CurrentRef<T> = { current: T };
 
@@ -93,26 +94,71 @@ export const useDesignEditorWebMcp = ({
       return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: `Canvas revision changed to ${canvasRevisionRef.current}; capture it again.` } };
     }
 
-    if (effects.uiLocked !== undefined) setIsUiLocked(effects.uiLocked);
-
+    const snapshot = elementsRef.current;
+    const removalTarget = effects.elementIdToRemove
+      ? snapshot.find(element => element.id === effects.elementIdToRemove)
+      : undefined;
     if (effects.elementIdToRemove) {
       if (confirmationOpen) {
         return { success: false, revision: canvasRevisionRef.current, error: { code: 'CONFIRMATION_BUSY', message: 'Another confirmation is already open.' } };
       }
-      const target = elementsRef.current.find(element => element.id === effects.elementIdToRemove);
-      if (!target) return { success: false, revision: canvasRevisionRef.current, error: { code: 'ELEMENT_NOT_FOUND', message: 'The element no longer exists.' } };
+      if (!removalTarget) return { success: false, revision: canvasRevisionRef.current, error: { code: 'ELEMENT_NOT_FOUND', message: 'The element no longer exists.' } };
       const reason = effects.removalReason ? ` Reason: ${effects.removalReason}` : '';
-      const confirmed = await requestConfirmation(`Remove "${target.name}" from the canvas?${reason}`, signal);
+      const confirmed = await requestConfirmation(`Remove "${removalTarget.name}" from the canvas?${reason}`, signal);
       signal.throwIfAborted();
       if (!confirmed) return { success: false, revision: canvasRevisionRef.current, error: { code: 'USER_CANCELLED', message: 'The user cancelled or did not confirm removal.' } };
       if (announce && !uiLockedRef.current) {
         return { success: false, revision: canvasRevisionRef.current, error: { code: 'UI_NOT_LOCKED', message: 'The UI lock expired or was released while confirmation was open.' } };
       }
-      if (expectedRevision !== canvasRevisionRef.current) {
+      if (expectedRevision !== undefined && expectedRevision !== canvasRevisionRef.current) {
         return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: 'The canvas changed while confirmation was open.' } };
       }
-      setElements(previous => previous.filter(element => element.id !== target.id));
-      setSelectedIds(selectedIdsRef.current.filter(id => id !== target.id));
+    }
+
+    const replacementTarget = effects.elementReplacement
+      ? snapshot.find(element => element.id === effects.elementReplacement?.id)
+      : undefined;
+    if (effects.elementReplacement) {
+      const replacement = effects.elementReplacement;
+      if (!replacementTarget) {
+        return { success: false, revision: canvasRevisionRef.current, error: { code: 'ELEMENT_NOT_FOUND', message: 'The layout slot no longer exists.' } };
+      }
+      const replacesFilledSlot = announce
+        && replacementTarget.layoutSlot?.role !== null
+        && replacementTarget.layoutSlot?.role !== replacement.layoutSlot?.role;
+      if (replacesFilledSlot) {
+        if (confirmationOpen) {
+          return { success: false, revision: canvasRevisionRef.current, error: { code: 'CONFIRMATION_BUSY', message: 'Another confirmation is already open.' } };
+        }
+        const confirmed = await requestConfirmation(
+          `Replace the current ${replacementTarget.layoutSlot?.role} content in "${replacementTarget.name}" with ${replacement.layoutSlot?.role}?`,
+          signal,
+          'Yes, Replace Content',
+        );
+        signal.throwIfAborted();
+        if (!confirmed) return { success: false, revision: canvasRevisionRef.current, error: { code: 'USER_CANCELLED', message: 'The user cancelled or did not confirm slot replacement.' } };
+        if (!uiLockedRef.current) {
+          return { success: false, revision: canvasRevisionRef.current, error: { code: 'UI_NOT_LOCKED', message: 'The UI lock expired or was released while confirmation was open.' } };
+        }
+        if (expectedRevision !== undefined && expectedRevision !== canvasRevisionRef.current) {
+          return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: 'The canvas changed while confirmation was open.' } };
+        }
+      }
+    }
+
+    signal.throwIfAborted();
+    if (expectedRevision !== undefined && expectedRevision !== canvasRevisionRef.current) {
+      return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: 'The canvas changed before the write could be committed.' } };
+    }
+
+    let nextElements = snapshot;
+    let nextSelectedIds = selectedIdsRef.current;
+    let canvasChanged = false;
+
+    if (removalTarget) {
+      nextElements = nextElements.filter(element => element.id !== removalTarget.id);
+      nextSelectedIds = nextSelectedIds.filter(id => id !== removalTarget.id);
+      canvasChanged = true;
     }
 
     if (effects.elementToAdd) {
@@ -123,64 +169,53 @@ export const useDesignEditorWebMcp = ({
         x: effects.elementToAdd.x + offsetX,
         y: effects.elementToAdd.y + offsetY,
       };
-      setElements(previous => [...previous, element]);
-      setSelectedIds([element.id]);
+      nextElements = [...nextElements, element];
+      nextSelectedIds = [element.id];
+      canvasChanged = true;
     }
 
     if (effects.layoutElementsToAdd) {
-      setElements(previous => [...previous, ...effects.layoutElementsToAdd!]);
-      setSelectedIds(effects.layoutElementsToAdd.map(element => element.id));
+      nextElements = [...nextElements, ...effects.layoutElementsToAdd];
+      nextSelectedIds = effects.layoutElementsToAdd.map(element => element.id);
+      canvasChanged = true;
     }
 
     if (effects.elementReplacement) {
       const replacement = effects.elementReplacement;
-      const currentElement = elementsRef.current.find(element => element.id === replacement.id);
-      if (!currentElement) {
-        return { success: false, revision: canvasRevisionRef.current, error: { code: 'ELEMENT_NOT_FOUND', message: 'The layout slot no longer exists.' } };
-      }
-      const replacesFilledSlot = announce
-        && currentElement.layoutSlot?.role !== null
-        && currentElement.layoutSlot?.role !== replacement.layoutSlot?.role;
-      if (replacesFilledSlot) {
-        if (confirmationOpen) {
-          return { success: false, revision: canvasRevisionRef.current, error: { code: 'CONFIRMATION_BUSY', message: 'Another confirmation is already open.' } };
-        }
-        const confirmed = await requestConfirmation(
-          `Replace the current ${currentElement.layoutSlot?.role} content in "${currentElement.name}" with ${replacement.layoutSlot?.role}?`,
-          signal,
-          'Yes, Replace Content',
-        );
-        signal.throwIfAborted();
-        if (!confirmed) return { success: false, revision: canvasRevisionRef.current, error: { code: 'USER_CANCELLED', message: 'The user cancelled or did not confirm slot replacement.' } };
-        if (!uiLockedRef.current) {
-          return { success: false, revision: canvasRevisionRef.current, error: { code: 'UI_NOT_LOCKED', message: 'The UI lock expired or was released while confirmation was open.' } };
-        }
-        if (expectedRevision !== canvasRevisionRef.current) {
-          return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: 'The canvas changed while confirmation was open.' } };
-        }
-      }
-      setElements(previous => previous.map(element => element.id === replacement.id ? replacement : element));
-      setSelectedIds([replacement.id]);
+      nextElements = nextElements.map(element => element.id === replacement.id ? replacement : element);
+      nextSelectedIds = [replacement.id];
+      canvasChanged = true;
     }
 
     if (effects.diagramCode) {
-      const centerX = -viewPosRef.current.x + (window.innerWidth / 2) / scaleRef.current;
-      const centerY = -viewPosRef.current.y + (window.innerHeight / 2) / scaleRef.current;
+      const size = { width: 500, height: 400 };
+      const position = placeElementAtViewportCenter(
+        viewPosRef.current,
+        scaleRef.current,
+        { width: window.innerWidth, height: window.innerHeight },
+        size,
+      );
       const diagram: CanvasElement = {
         id: crypto.randomUUID(),
         type: 'mindmap',
         name: effects.diagramType ? `AI ${effects.diagramType}` : 'AI Diagram',
-        x: centerX - 250,
-        y: centerY - 200,
-        w: 500,
-        h: 400,
-        zIndex: elementsRef.current.reduce((maximum, element) => Math.max(maximum, element.zIndex), 0) + 1,
+        ...position,
+        w: size.width,
+        h: size.height,
+        zIndex: getNextElementZIndex(nextElements),
         color: 'transparent',
         mermaidCode: effects.diagramCode,
       };
-      setElements(previous => [...previous, diagram]);
-      setSelectedIds([diagram.id]);
+      nextElements = [...nextElements, diagram];
+      nextSelectedIds = [diagram.id];
+      canvasChanged = true;
     }
+
+    if (canvasChanged) {
+      setElements(nextElements);
+      setSelectedIds(nextSelectedIds);
+    }
+    if (effects.uiLocked !== undefined) setIsUiLocked(effects.uiLocked);
 
     if (effects.pendingPlan) setPendingPlan(effects.pendingPlan);
     if (announce) addChatMessage('system', outcome.message, effects.pendingPlan, effects.imageSearchResults);

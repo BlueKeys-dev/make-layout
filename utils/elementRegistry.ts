@@ -134,20 +134,22 @@ export const createElementFactory = (
       };
       
     case 'container':
-      return {
-        ...base,
+      return createContainerBoard({
+        x,
+        y,
         w: 500,
         h: 500,
-        color: 'bg-slate-100/50',
         name: 'Container',
+        color: '#ffffff',
+        zIndex,
         locked: false,
         boardConfig: {
           showGrid: true,
           gridRows: 12,
           gridCols: 12,
           showGuides: true,
-        }
-      };
+        },
+      });
 
     default:
       return base;
@@ -163,6 +165,7 @@ export type ContainerBoardOptions = {
   color?: string;
   locked?: boolean;
   content?: string;
+  zIndex?: number;
   boardConfig?: Partial<BoardConfig>;
 };
 
@@ -175,6 +178,7 @@ export const createContainerBoard = ({
   color = '#ffffff',
   locked = false,
   content,
+  zIndex = 0,
   boardConfig,
 }: ContainerBoardOptions): CanvasElement => ({
   id: crypto.randomUUID(),
@@ -184,7 +188,7 @@ export const createContainerBoard = ({
   w,
   h,
   color,
-  zIndex: 0,
+  zIndex,
   name,
   locked,
   ...(content === undefined ? {} : { content }),

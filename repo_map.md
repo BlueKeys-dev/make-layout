@@ -15,12 +15,15 @@ Last updated: 2026-09-02
 - `DesignEditor` initializes the world translation at negative half the primary board dimensions so the main board opens centered without forcing later recentering.
 - `hooks/useHistory.ts` stores undo/redo snapshots for the page array.
 - `hooks/useCanvasInteraction.ts` owns selection, dragging, and resize interactions.
+- `hooks/useCanvasPlacement.ts` owns element placement, freehand/polygon drawing, marquee selection, and canvas panning.
+- `hooks/useCanvasInsertions.ts` owns PDF, diagram, animation, and secondary-board insertion orchestration.
 
 ## Canvas and boards
 
 - `components/canvas/CanvasStage.tsx` renders the primary board at world origin `(0, 0)` and every canvas element as an absolute sibling.
 - `components/CanvasElementRender.tsx` routes each `CanvasElement.type` to its renderer.
 - Secondary boards are `CanvasElement` containers. Their children are associated geometrically and use absolute world coordinates inside the board bounds; there is no parent-child element tree.
+- `utils/canvasPlacement.ts` owns target-relative centering, overlap avoidance, z-index selection, viewport centering, and next-board positioning.
 - `components/CanvasSettingsBar.tsx` edits the active board or primary canvas and opens the layout library.
 - `components/PropertiesPanel.tsx` edits selected elements, including layout-slot roles.
 
@@ -36,7 +39,7 @@ Last updated: 2026-09-02
 - `services/canvasToolCatalog.ts` is the single WebMCP/chat tool schema catalog.
 - `services/canvasToolEngine.ts` validates and executes tool requests. `load_layout_template` resolves `activeBoardId` and returns `layoutElementsToAdd`.
 - `services/webmcp.ts` registers catalog tools and serializes mutations.
-- `components/DesignEditor.tsx` applies tool effects to live editor state and enforces revision/UI-lock checks.
+- `hooks/useDesignEditorWebMcp.ts` validates confirmations and revision/UI-lock state, derives one next canvas snapshot, and commits each tool write once through `useCanvasPages`.
 
 ## Rich content and safety
 

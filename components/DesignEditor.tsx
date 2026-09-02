@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { Moon, Sun, Crosshair, Trash2, BookOpen } from 'lucide-react';
-import { CanvasElement, ElementType, CanvasConfig, ChatMessage, LayoutPlan, AIModelId, P5Data } from '../types';
-import { DEFAULT_CANVAS_CONFIG, getEffectiveDimensions, getSafeZones, loadCanvasConfig, saveCanvasConfig } from '../config/canvasDefaults';
+import { Moon, Sun, Trash2 } from 'lucide-react';
+import { CanvasElement, CanvasConfig, ChatMessage, LayoutPlan, AIModelId } from '../types';
+import { DEFAULT_CANVAS_CONFIG, getEffectiveDimensions, loadCanvasConfig, saveCanvasConfig } from '../config/canvasDefaults';
 import { PropertiesPanel } from './PropertiesPanel';
 import { processChatMessage, quickGenerateLayout } from '../services/chatai';
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction';
 import { FloatingToolbar } from './FloatingToolbar';
 import { MultiAIChatPanel } from './chat';
 import { CanvasSettingsBar } from './CanvasSettingsBar';
-import { createContainerBoard, createElementFactory, getElementDefaultSize } from '../utils/elementRegistry';
+import { createElementFactory } from '../utils/elementRegistry';
 import { getDefaultModel } from '../services/aiProviders';
 
 // Refactored Imports
@@ -18,53 +18,13 @@ import { CanvasStage } from './canvas/CanvasStage';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { useCanvasPages } from '../hooks/useCanvasPages';
 import { useLayoutLibrary } from '../hooks/useLayoutLibrary';
-import { SHAPES } from './ShapeLibrary';
 import { ShapeType } from '../types';
 import { CanvasToolOutcome } from '../services/canvasToolEngine';
 import { CanvasToolName } from '../services/canvasToolCatalog';
 import { useDesignEditorWebMcp } from '../hooks/useDesignEditorWebMcp';
+import { useCanvasInsertions } from '../hooks/useCanvasInsertions';
+import { useCanvasPlacement } from '../hooks/useCanvasPlacement';
 import { DesignEditorModals, type ConfirmDeleteState } from './editor/DesignEditorModals';
-
-type Bounds = { x: number; y: number; w: number; h: number };
-
-const getElementBounds = (el: CanvasElement): Bounds => {
-    return { x: el.x, y: el.y, w: el.w, h: el.h };
-};
-
-const fitPathStroke = (worldPoints: number[][], strokeWidth = 4) => {
-    const pad = Math.max(8, strokeWidth * 2);
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const pt of worldPoints) {
-        minX = Math.min(minX, pt[0]);
-        minY = Math.min(minY, pt[1]);
-        maxX = Math.max(maxX, pt[0]);
-        maxY = Math.max(maxY, pt[1]);
-    }
-    if (!Number.isFinite(minX)) {
-        return { x: 0, y: 0, w: pad * 2, h: pad * 2, points: [] as number[][] };
-    }
-    const x = minX - pad;
-    const y = minY - pad;
-    return {
-        x,
-        y,
-        w: Math.max(pad * 2, maxX - minX + pad * 2),
-        h: Math.max(pad * 2, maxY - minY + pad * 2),
-        points: worldPoints.map(([px, py, pr]) => [px - x, py - y, pr ?? 0.5]),
-    };
-};
-
-const rectsOverlap = (a: Bounds, b: Bounds) =>
-    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
-
-const normalizeRect = (start: { x: number; y: number }, current: { x: number; y: number }): Bounds => {
-    const x = Math.min(start.x, current.x);
-    const y = Math.min(start.y, current.y);
-    return { x, y, w: Math.abs(current.x - start.x), h: Math.abs(current.y - start.y) };
-};
 
 const getInitialViewPosition = () => {
     const { width, height } = getEffectiveDimensions(DEFAULT_CANVAS_CONFIG);
@@ -86,10 +46,6 @@ export const DesignEditor = () => {
     } = useCanvasPages();
 
     // -- Interaction State --
-    const [activeTool, setActiveTool] = useState('select');
-    const [pendingElementType, setPendingElementType] = useState<ElementType | null>(null);
-    const [pendingShapeType, setPendingShapeType] = useState<ShapeType | null>(null);
-    const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
     const [isMindMapGeneratorOpen, setIsMindMapGeneratorOpen] = useState(false);
     const [isP5GeneratorOpen, setIsP5GeneratorOpen] = useState(false);
     const [isAnimationHomeOpen, setIsAnimationHomeOpen] = useState(false);
@@ -97,14 +53,6 @@ export const DesignEditor = () => {
     const closeAnimationHome = useCallback(() => {
         setIsAnimationHomeOpen(false);
     }, []);
-    const [ghostPosition, setGhostPosition] = useState<{ x: number, y: number } | null>(null);
-    const [placementStart, setPlacementStart] = useState<{ x: number, y: number } | null>(null);
-
-    // Polygon Drawing State
-    const [drawingPolygonVertices, setDrawingPolygonVertices] = useState<{ x: number, y: number }[]>([]);
-    const [polygonPreviewMousePos, setPolygonPreviewMousePos] = useState<{ x: number, y: number } | null>(null);
-    const POLYGON_CLOSE_THRESHOLD = 15; // pixels to detect close to start
-
     // -- View State --
     const [isGenerating, setIsGenerating] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -122,8 +70,6 @@ export const DesignEditor = () => {
 
     // -- Infinite Canvas State --
     const [viewPos, setViewPos] = useState(getInitialViewPosition);
-    const [isPanning, setIsPanning] = useState(false);
-    const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
     // -- Chat State --
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -138,11 +84,6 @@ export const DesignEditor = () => {
     scaleRef.current = scale;
     viewPosRef.current = viewPos;
     const abortControllerRef = useRef<AbortController | null>(null);
-    const activeDrawingIdRef = useRef<string | null>(null); // Track actively drawing path element
-    const pointsBufferRef = useRef<number[][]>([]); // Buffer for high-frequency point collection
-    const pathWorldPointsRef = useRef<number[][]>([]);
-    const rafIdRef = useRef<number | null>(null); // RequestAnimationFrame ID
-    const marqueeRef = useRef<{ start: { x: number; y: number }; additive: boolean; baseIds: string[] } | null>(null);
     const elementsRef = useRef<CanvasElement[]>([]);
     const canvasConfigRef = useRef(canvasConfig);
     const currentPageRef = useRef(currentPage);
@@ -152,8 +93,6 @@ export const DesignEditor = () => {
     const uiLockedRef = useRef(false);
     const canvasRevisionRef = useRef(0);
     const previousCanvasRef = useRef({ pages, currentPage, canvasConfig });
-    const marqueeRectRef = useRef<Bounds | null>(null);
-    const [marqueeRect, setMarqueeRect] = useState<Bounds | null>(null);
     const { width: logicalWidth, height: logicalHeight } = getEffectiveDimensions(canvasConfig);
 
     // -- Interaction Hooks --
@@ -164,6 +103,38 @@ export const DesignEditor = () => {
         handleMouseMove: handleElementDragMove,
         handleMouseUp: handleElementDragEnd
     } = useCanvasInteraction(elements, setElements, scale);
+
+    elementsRef.current = elements;
+    const {
+        activeTool,
+        setActiveTool,
+        pendingElementType,
+        isAddMenuOpen,
+        setIsAddMenuOpen,
+        ghostPosition,
+        placementStart,
+        drawingPolygonVertices,
+        polygonPreviewMousePos,
+        marqueeRect,
+        initiatePlacement,
+        onSetTool,
+        handleCanvasMouseMove,
+        handleCanvasMouseDown,
+        handleCanvasMouseUp,
+        removeLastPolygonVertex,
+    } = useCanvasPlacement({
+        canvasRef,
+        elements,
+        elementsRef,
+        selectedIds,
+        setSelectedIds,
+        setElements,
+        scale,
+        viewPos,
+        setViewPos,
+        handleElementDragMove,
+        handleElementDragEnd,
+    });
 
     const selectedElement = elements.find(e => selectedIds.includes(e.id));
     const isSelected = (id: string) => selectedIds.includes(id);
@@ -191,7 +162,6 @@ export const DesignEditor = () => {
         ? 'square'
         : layoutTargetWidth > layoutTargetHeight ? 'landscape' : 'portrait';
 
-    elementsRef.current = elements;
     canvasConfigRef.current = canvasConfig;
     currentPageRef.current = currentPage;
     pageCountRef.current = pages.length;
@@ -250,444 +220,11 @@ export const DesignEditor = () => {
         return { x: -tx * scale, y: -ty * scale };
     }, [selectedBoardId, activeBoard, elements, logicalWidth, logicalHeight, scale]);
 
-    // Helper to get a centered view position for a given target point
-    const getCenteredViewPos = useCallback((targetX: number, targetY: number) => {
-        return { x: -targetX * scale, y: -targetY * scale };
-    }, [scale]);
-
     const idealViewPos = getIdealViewPos();
 
     useEffect(() => {
         if (selectedIds.length > 0) setRightPanelCollapsed(false);
     }, [selectedIds]);
-
-    // --- Coordinate Systems ---
-    const getCanvasCoordinates = useCallback((clientX: number, clientY: number) => {
-        if (!canvasRef.current) return { x: 0, y: 0 };
-        const rect = canvasRef.current.getBoundingClientRect();
-        return {
-            x: (clientX - rect.left) / scale,
-            y: (clientY - rect.top) / scale
-        };
-    }, [scale, viewPos]); // viewPos dependency implicitly handled by getBoundingClientRect, but kept for clarity
-
-    const applyMarqueeHits = useCallback((rect: Bounds, additive: boolean, baseIds: string[]) => {
-        const hits = elementsRef.current
-            .filter(el => rectsOverlap(rect, getElementBounds(el)))
-            .map(el => el.id);
-        setSelectedIds(additive ? [...new Set([...baseIds, ...hits])] : hits);
-    }, [setSelectedIds]);
-
-    const finishMarquee = useCallback(() => {
-        const marquee = marqueeRef.current;
-        if (!marquee) return;
-        const rect = marqueeRectRef.current;
-        marqueeRef.current = null;
-        marqueeRectRef.current = null;
-        setMarqueeRect(null);
-        if (!rect || (rect.w < 4 && rect.h < 4)) {
-            setSelectedIds(marquee.additive ? marquee.baseIds : []);
-            return;
-        }
-        applyMarqueeHits(rect, marquee.additive, marquee.baseIds);
-    }, [applyMarqueeHits, setSelectedIds]);
-
-    useEffect(() => {
-        const onMove = (e: MouseEvent) => {
-            const marquee = marqueeRef.current;
-            if (!marquee) return;
-            const coords = getCanvasCoordinates(e.clientX, e.clientY);
-            const rect = normalizeRect(marquee.start, coords);
-            marqueeRectRef.current = rect;
-            setMarqueeRect(rect);
-            if (rect.w >= 4 || rect.h >= 4) {
-                applyMarqueeHits(rect, marquee.additive, marquee.baseIds);
-            }
-        };
-        const onUp = () => {
-            if (marqueeRef.current) finishMarquee();
-        };
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && marqueeRef.current) {
-                marqueeRef.current = null;
-                marqueeRectRef.current = null;
-                setMarqueeRect(null);
-            }
-        };
-        window.addEventListener('mousemove', onMove);
-        window.addEventListener('mouseup', onUp);
-        window.addEventListener('keydown', onKey);
-        return () => {
-            window.removeEventListener('mousemove', onMove);
-            window.removeEventListener('mouseup', onUp);
-            window.removeEventListener('keydown', onKey);
-        };
-    }, [getCanvasCoordinates, applyMarqueeHits, finishMarquee, setSelectedIds]);
-
-    const initiatePlacement = (type: ElementType, shapeType?: ShapeType) => {
-        // Clear any polygon drawing in progress
-        if (drawingPolygonVertices.length >= 3) {
-            // completePolygon is defined below, but this call is safe since initiatePlacement is called at runtime, not definition time
-        }
-        setDrawingPolygonVertices([]);
-        setActiveTool('placement');
-        setPendingElementType(type);
-        setPendingShapeType(shapeType || (type === 'shape' ? 'rectangle' : null));
-        setIsAddMenuOpen(false);
-        setSelectedIds([]);
-    };
-
-    // Complete polygon drawing and create element
-    const completePolygon = () => {
-        if (drawingPolygonVertices.length < 3) {
-            console.log(JSON.stringify({ action: 'error', vertices: drawingPolygonVertices, polygon_closed: false, message: 'At least 3 vertices required to form a polygon.' }));
-            setDrawingPolygonVertices([]);
-            return;
-        }
-
-        // Calculate bounding box
-        const xs = drawingPolygonVertices.map(p => p.x);
-        const ys = drawingPolygonVertices.map(p => p.y);
-        const minX = Math.min(...xs);
-        const minY = Math.min(...ys);
-        const maxX = Math.max(...xs);
-        const maxY = Math.max(...ys);
-        const w = maxX - minX || 100;
-        const h = maxY - minY || 100;
-
-        // Normalize points relative to bounding box
-        const normalizedPoints = drawingPolygonVertices.map(p => ({
-            x: p.x - minX,
-            y: p.y - minY
-        }));
-
-        const newElement = createElementFactory('shape', minX, minY, elements.length + 1, 'custom_polygon', normalizedPoints as { x: number, y: number }[]);
-        newElement.w = w;
-        newElement.h = h;
-
-        setElements(prev => [...prev, newElement]);
-        setSelectedIds([newElement.id]);
-        setDrawingPolygonVertices([]);
-        setActiveTool('select');
-    };
-
-    // Wrapper for setting active tool to handle auto-close
-    const onSetTool = (tool: string) => {
-        if (drawingPolygonVertices.length >= 3) {
-            completePolygon();
-            console.log(JSON.stringify({ action: 'polygon_closed', vertices: drawingPolygonVertices, polygon_closed: true, message: 'Polygon closed automatically on tool switch.' }));
-        } else if (drawingPolygonVertices.length > 0) {
-            setDrawingPolygonVertices([]); // Discard incomplete
-            console.log(JSON.stringify({ action: 'error', vertices: [], polygon_closed: false, message: 'Incomplete polygon discarded on tool switch.' }));
-        }
-        // Clear polygon preview mouse position when switching tools
-        if (tool !== 'polygon_draw') {
-            setPolygonPreviewMousePos(null);
-        }
-        setActiveTool(tool);
-    };
-
-    const handleCanvasMouseMove = (e: React.MouseEvent) => {
-        if (isPanning) {
-            const dx = e.clientX - panStart.x;
-            const dy = e.clientY - panStart.y;
-            setViewPos(prev => ({ x: prev.x + dx, y: prev.y + dy }));
-            setPanStart({ x: e.clientX, y: e.clientY });
-            return;
-        }
-
-        handleElementDragMove(e);
-
-        if (marqueeRef.current) {
-            const coords = getCanvasCoordinates(e.clientX, e.clientY);
-            const rect = normalizeRect(marqueeRef.current.start, coords);
-            marqueeRectRef.current = rect;
-            setMarqueeRect(rect);
-            if (rect.w >= 4 || rect.h >= 4) {
-                applyMarqueeHits(rect, marqueeRef.current.additive, marqueeRef.current.baseIds);
-            }
-            return;
-        }
-
-        // Track mouse position for polygon drawing preview
-        if (activeTool === 'polygon_draw') {
-            const coords = getCanvasCoordinates(e.clientX, e.clientY);
-            setPolygonPreviewMousePos(coords);
-        }
-
-        if (activeTool === 'placement' && pendingElementType) {
-            const coords = getCanvasCoordinates(e.clientX, e.clientY);
-
-            // Phantom Box (for shapes, text, etc)
-            if (placementStart && pendingElementType !== 'path') {
-                setGhostPosition(coords);
-            }
-            // Freehand Drawing - Optimized with buffer
-            else if (placementStart && pendingElementType === 'path') {
-                // Collect points in a buffer
-                const pressure = (e.nativeEvent as PointerEvent).pressure || 0.5;
-                pointsBufferRef.current.push([coords.x, coords.y, pressure]);
-
-                // Schedule a single state update via requestAnimationFrame
-                if (!rafIdRef.current) {
-                    rafIdRef.current = requestAnimationFrame(() => {
-                        const activeId = activeDrawingIdRef.current || selectedIds[0];
-                        const bufferedPoints = pointsBufferRef.current;
-                        pointsBufferRef.current = []; // Clear buffer for next batch
-                        rafIdRef.current = null;
-
-                        if (activeId && bufferedPoints.length > 0) {
-                            pathWorldPointsRef.current = [...pathWorldPointsRef.current, ...bufferedPoints];
-                            const fitted = fitPathStroke(pathWorldPointsRef.current, 4);
-                            setElements(prev => prev.map(el => {
-                                if (el.id === activeId && el.type === 'path') {
-                                    return { ...el, ...fitted };
-                                }
-                                return el;
-                            }), false);
-                        }
-                    });
-                }
-            } else {
-                setGhostPosition(coords);
-            }
-        }
-    };
-
-    const handleCanvasMouseDown = (e: React.MouseEvent) => {
-        if (activeTool === 'hand' || (e.buttons === 4) || (e.button === 1)) { // Hand tool or Middle Click
-            setIsPanning(true);
-            setPanStart({ x: e.clientX, y: e.clientY });
-            setSelectedIds([]);
-            return;
-        }
-
-        // Edge Insertion for Custom Polygon
-        if (activeTool === 'select' && selectedIds.length === 1) {
-            const selectedElement = elements.find(el => el.id === selectedIds[0]);
-            if (selectedElement?.type === 'shape' && selectedElement.shapeType === 'custom_polygon') {
-                const coords = getCanvasCoordinates(e.clientX, e.clientY);
-                const localX = coords.x - selectedElement.x;
-                const localY = coords.y - selectedElement.y;
-                const points = selectedElement.points as { x: number, y: number }[];
-
-                // Find closest edge
-                for (let i = 0; i < points.length; i++) {
-                    const p1 = points[i];
-                    const p2 = points[(i + 1) % points.length];
-
-                    // Distance from point to line segment
-                    const l2 = (p1.x - p2.x) ** 2 + (p1.y - p2.y) ** 2;
-                    if (l2 === 0) continue;
-                    const t = ((localX - p1.x) * (p2.x - p1.x) + (localY - p1.y) * (p2.y - p1.y)) / l2;
-                    const tClamped = Math.max(0, Math.min(1, t));
-                    const projX = p1.x + tClamped * (p2.x - p1.x);
-                    const projY = p1.y + tClamped * (p2.y - p1.y);
-                    const dist = Math.hypot(localX - projX, localY - projY);
-
-                    if (dist < 10 / scale) { // 10px threshold
-                        // Insert new vertex
-                        const newPoint = { x: localX, y: localY };
-                        const newPoints = [...points];
-                        newPoints.splice(i + 1, 0, newPoint);
-
-                        setElements(prev => prev.map(el => {
-                            if (el.id === selectedElement.id) {
-                                return { ...el, points: newPoints };
-                            }
-                            return el;
-                        }));
-
-                        console.log(JSON.stringify({
-                            action: 'vertex_inserted',
-                            vertices: newPoints.map(p => ({ x: p.x + selectedElement.x, y: p.y + selectedElement.y })),
-                            polygon_closed: true,
-                            message: `Vertex inserted at edge between index ${i} and ${(i + 1) % points.length}`
-                        }));
-                        return;
-                    }
-                }
-            }
-        }
-
-        if (activeTool === 'placement' && pendingElementType) {
-            const coords = getCanvasCoordinates(e.clientX, e.clientY);
-            setPlacementStart(coords);
-            setGhostPosition(coords);
-
-            // Special Handling for Pencil (Freehand)
-            if (pendingElementType === 'path') {
-                const pressure = (e.nativeEvent as PointerEvent).pressure || 0.5;
-                const first = [coords.x, coords.y, pressure];
-                pathWorldPointsRef.current = [first];
-                const fitted = fitPathStroke([first], 4);
-                const newElement = createElementFactory('path', fitted.x, fitted.y, elements.length + 1);
-                newElement.x = fitted.x;
-                newElement.y = fitted.y;
-                newElement.w = fitted.w;
-                newElement.h = fitted.h;
-                newElement.points = fitted.points;
-                newElement.color = 'transparent';
-
-                setElements(prev => [...prev, newElement], false);
-                setSelectedIds([newElement.id]);
-                activeDrawingIdRef.current = newElement.id;
-                pointsBufferRef.current = [];
-            }
-
-        } else if (activeTool === 'polygon_draw') {
-            // Polygon Drawing Mode
-            const coords = getCanvasCoordinates(e.clientX, e.clientY);
-
-            if (drawingPolygonVertices.length >= 3) {
-                // Check if clicking near start point to close
-                const start = drawingPolygonVertices[0];
-                const dist = Math.hypot(coords.x - start.x, coords.y - start.y);
-                if (dist < POLYGON_CLOSE_THRESHOLD / scale) {
-                    // Close the polygon
-                    completePolygon();
-                    console.log(JSON.stringify({ action: 'polygon_closed', vertices: drawingPolygonVertices, polygon_closed: true, message: 'Polygon closed by connecting to start.' }));
-                    return;
-                }
-            }
-
-            // Add vertex
-            const newVertices = [...drawingPolygonVertices, coords];
-            setDrawingPolygonVertices(newVertices);
-            console.log(JSON.stringify({ action: 'vertex_added', vertices: newVertices, polygon_closed: false, message: `Vertex added at (${Math.round(coords.x)}, ${Math.round(coords.y)})` }));
-
-        } else {
-            if (e.target === e.currentTarget || (canvasRef.current && canvasRef.current.contains(e.target as Node))) {
-                if (activeTool === 'select') {
-                    const coords = getCanvasCoordinates(e.clientX, e.clientY);
-                    marqueeRef.current = {
-                        start: coords,
-                        additive: e.shiftKey,
-                        baseIds: e.shiftKey ? [...selectedIds] : [],
-                    };
-                    if (!e.shiftKey) setSelectedIds([]);
-                    marqueeRectRef.current = { x: coords.x, y: coords.y, w: 0, h: 0 };
-                    setMarqueeRect({ x: coords.x, y: coords.y, w: 0, h: 0 });
-                }
-            }
-        }
-    };
-
-    const handleCanvasMouseUp = (e: React.MouseEvent) => {
-        if (isPanning) {
-            setIsPanning(false);
-            return;
-        }
-
-        handleElementDragEnd();
-
-        if (marqueeRef.current) {
-            finishMarquee();
-            return;
-        }
-
-        if (activeTool === 'placement' && pendingElementType && placementStart) {
-            // For Path, we are done with this stroke.
-            if (pendingElementType === 'path') {
-                if (pointsBufferRef.current.length > 0) {
-                    pathWorldPointsRef.current = [...pathWorldPointsRef.current, ...pointsBufferRef.current];
-                    pointsBufferRef.current = [];
-                }
-                const activeId = activeDrawingIdRef.current;
-                if (activeId && pathWorldPointsRef.current.length > 0) {
-                    const fitted = fitPathStroke(pathWorldPointsRef.current, 4);
-                    setElements(prev => prev.map(el => {
-                        if (el.id === activeId && el.type === 'path') {
-                            return { ...el, ...fitted };
-                        }
-                        return el;
-                    }), true);
-                }
-                setPlacementStart(null);
-                setGhostPosition(null);
-                activeDrawingIdRef.current = null;
-                pathWorldPointsRef.current = [];
-                if (rafIdRef.current) {
-                    cancelAnimationFrame(rafIdRef.current);
-                    rafIdRef.current = null;
-                }
-                return;
-            }
-
-            const coords = getCanvasCoordinates(e.clientX, e.clientY);
-            const w = Math.abs(coords.x - placementStart.x);
-            const h = Math.abs(coords.y - placementStart.y);
-            let finalX, finalY, finalW, finalH;
-
-            if (w < 15 && h < 15) {
-                const defaults = getElementDefaultSize(pendingElementType);
-                finalX = coords.x - (defaults.w / 2);
-                finalY = coords.y - (defaults.h / 2);
-                finalW = defaults.w;
-                finalH = defaults.h;
-            } else {
-                finalX = Math.min(placementStart.x, coords.x);
-                finalY = Math.min(placementStart.y, coords.y);
-                finalW = w;
-                finalH = h;
-            }
-
-            const newElement = createElementFactory(
-                pendingElementType,
-                finalX,
-                finalY,
-                elements.length + 1,
-                pendingShapeType,
-                (pendingElementType === 'shape' && pendingShapeType)
-                    ? SHAPES[pendingShapeType].createInitialPoints(finalW, finalH) as { x: number, y: number }[]
-                    : undefined
-            );
-            newElement.w = finalW;
-            newElement.h = finalH;
-
-            if (pendingElementType === 'text') {
-                newElement.justCreated = true;
-
-                // Find parent board to adapt text color
-                const centerX = newElement.x + newElement.w / 2;
-                const centerY = newElement.y + newElement.h / 2;
-                const parentBoard = elements
-                    .slice().reverse() // Check higher z-index first if overlapping
-                    .filter(e => e.type === 'container')
-                    .find(b =>
-                        centerX >= b.x && centerX <= b.x + b.w &&
-                        centerY >= b.y && centerY <= b.y + b.h
-                    );
-
-                const bgColor = parentBoard?.boardConfig?.backgroundColor || parentBoard?.color || '#ffffff';
-
-                // Simple contrast check
-                const getContrast = (c: string) => {
-                    if (!c || c === 'transparent') return '#000000';
-                    if (c.startsWith('rgb')) return '#000000'; // Fallback for complex formats not parsed yet
-                    let hex = c.replace('#', '');
-                    if (hex.length === 3) hex = hex.split('').map(x => x + x).join('');
-                    const r = parseInt(hex.substring(0, 2), 16);
-                    const g = parseInt(hex.substring(2, 4), 16);
-                    const b = parseInt(hex.substring(4, 6), 16);
-                    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-                    return yiq >= 128 ? '#000000' : '#ffffff';
-                };
-
-                if (newElement.textStyle) {
-                    newElement.textStyle.color = getContrast(bgColor);
-                }
-            }
-
-            setElements(prev => [...prev, newElement]);
-            setPendingElementType(null);
-            setPendingShapeType(null);
-            setActiveTool('select');
-            setSelectedIds([newElement.id]);
-            setGhostPosition(null);
-            setPlacementStart(null);
-        }
-    };
 
     // --- Global Shortcuts ---
     const deleteSelectedElement = useCallback(() => {
@@ -696,19 +233,6 @@ export const DesignEditor = () => {
             setSelectedIds([]);
         }
     }, [selectedIds, setElements, setSelectedIds]);
-
-    const removeLastPolygonVertex = useCallback(() => {
-        if (drawingPolygonVertices.length > 0) {
-            const newVertices = drawingPolygonVertices.slice(0, -1);
-            setDrawingPolygonVertices(newVertices);
-            console.log(JSON.stringify({
-                action: 'vertex_removed',
-                vertices: newVertices,
-                polygon_closed: false,
-                message: `Removed last vertex. ${newVertices.length} vertices remaining.`
-            }));
-        }
-    }, [drawingPolygonVertices]);
 
     const zoomTo = useCallback((nextScale: number, focusX: number, focusY: number) => {
         const s = scaleRef.current;
@@ -1107,172 +631,28 @@ export const DesignEditor = () => {
         }
     }, [selectedBoardId, activeBoard, pages, currentPage, setPages, setElements, elements.length]);
 
-    const handleAddPDFPage = (text: string, pageNumber: number) => {
-        const boardX = elements.length > 0 ? Math.max(...elements.map(element => element.x + element.w)) + 100 : 100;
-        const boardY = 100;
-        const board = createContainerBoard({
-            x: boardX,
-            y: boardY,
-            w: 600,
-            h: 800,
-            color: '#ffffff',
-            name: `PDF Page ${pageNumber}`,
-            content: 'board',
-            boardConfig: {
-                backgroundColor: '#ffffff',
-                gridCols: 12,
-                gridRows: 12,
-                showGrid: true,
-                showGuides: DEFAULT_CANVAS_CONFIG.showGuides,
-                bleed: DEFAULT_CANVAS_CONFIG.bleed,
-            },
-        });
-        const textElement: CanvasElement = {
-            id: `text-${Date.now()}`,
-            type: 'text',
-            x: boardX + 40,
-            y: boardY + 40,
-            w: 500,
-            h: 700,
-            color: '#000000',
-            zIndex: 1,
-            name: `Page ${pageNumber} Text`,
-            content: text,
-            textStyle: { fontSize: 14, fontFamily: 'Inter', textAlign: 'left', lineHeight: 1.5 },
-        };
-
-        setElements(previous => [...previous, board, textElement]);
-        setShowPDFViewer(false);
-        setViewPos(getCenteredViewPos(boardX + board.w / 2, boardY + board.h / 2));
-    };
-
-    const handleAddAllPDFPages = (pdfPages: Array<{ text: string; pageNumber: number }>) => {
-        const startX = elements.length > 0
-            ? Math.max(...elements.map(element => element.x + element.w)) + 100
-            : 100;
-        const boardY = 100;
-        const newElements: CanvasElement[] = [];
-
-        pdfPages.forEach((page, index) => {
-            const boardX = startX + index * 700;
-            const board = createContainerBoard({
-                x: boardX,
-                y: boardY,
-                w: 600,
-                h: 800,
-                color: '#ffffff',
-                name: `PDF Page ${page.pageNumber}`,
-                content: 'board',
-                boardConfig: { backgroundColor: '#ffffff', gridCols: 12, gridRows: 12, showGrid: true },
-            });
-            const textElement: CanvasElement = {
-                id: `text-${Date.now()}-${index}`,
-                type: 'text',
-                x: boardX + 40,
-                y: boardY + 40,
-                w: 500,
-                h: 700,
-                color: '#000000',
-                zIndex: 1,
-                name: `Page ${page.pageNumber} Text`,
-                content: page.text,
-                textStyle: { fontSize: 14, fontFamily: 'Inter', textAlign: 'left', lineHeight: 1.5 },
-            };
-            newElements.push(board, textElement);
-        });
-
-        setElements(previous => [...previous, ...newElements]);
-        setShowPDFViewer(false);
-        if (newElements.length > 0) {
-            const firstBoard = newElements[0];
-            setViewPos(getCenteredViewPos(firstBoard.x + firstBoard.w / 2, firstBoard.y + firstBoard.h / 2));
-        }
-    };
-
-    const handleInsertMindMap = (mermaidCode: string) => {
-        setIsMindMapGeneratorOpen(false);
-        const initialWidth = 400;
-        const initialHeight = 300;
-        const boardX = activeBoard?.x ?? 0;
-        const boardY = activeBoard?.y ?? 0;
-        const boardWidth = activeBoard?.w ?? logicalWidth;
-        const boardHeight = activeBoard?.h ?? logicalHeight;
-        const boardCenterX = boardX + boardWidth / 2;
-        const boardCenterY = boardY + boardHeight / 2;
-        const padding = 20;
-        let elementX = Math.max(boardX + padding, Math.min(boardCenterX - initialWidth / 2, boardX + boardWidth - initialWidth - padding));
-        let elementY = Math.max(boardY + padding, Math.min(boardCenterY - initialHeight / 2, boardY + boardHeight - initialHeight - padding));
-        const overlaps = (x: number, y: number) => elements.some(element =>
-            element.type !== 'container'
-            && x < element.x + element.w
-            && x + initialWidth > element.x
-            && y < element.y + element.h
-            && y + initialHeight > element.y);
-
-        if (overlaps(elementX, elementY)) {
-            const offsets = [
-                { x: 50, y: 50 }, { x: -50, y: 50 },
-                { x: 50, y: -50 }, { x: -50, y: -50 },
-                { x: 100, y: 0 }, { x: 0, y: 100 },
-                { x: -100, y: 0 }, { x: 0, y: -100 },
-            ];
-            for (const offset of offsets) {
-                const candidateX = boardCenterX - initialWidth / 2 + offset.x;
-                const candidateY = boardCenterY - initialHeight / 2 + offset.y;
-                const insideBoard = candidateX >= boardX + padding
-                    && candidateX + initialWidth <= boardX + boardWidth - padding
-                    && candidateY >= boardY + padding
-                    && candidateY + initialHeight <= boardY + boardHeight - padding;
-                if (insideBoard && !overlaps(candidateX, candidateY)) {
-                    elementX = candidateX;
-                    elementY = candidateY;
-                    break;
-                }
-            }
-        }
-
-        const element: CanvasElement = {
-            id: crypto.randomUUID(),
-            type: 'mindmap',
-            name: 'Mind Map',
-            x: Math.round(elementX),
-            y: Math.round(elementY),
-            w: initialWidth,
-            h: initialHeight,
-            zIndex: elements.length + 10,
-            color: 'transparent',
-            mermaidCode,
-        };
-        setElements(previous => [...previous, element]);
-        setSelectedIds([element.id]);
-    };
-
-    const handleInsertP5 = (p5Data: P5Data) => {
-        setIsP5GeneratorOpen(false);
-        const width = 500;
-        const height = 400;
-        const boardX = activeBoard?.x ?? 0;
-        const boardY = activeBoard?.y ?? 0;
-        const boardWidth = activeBoard?.w ?? logicalWidth;
-        const boardHeight = activeBoard?.h ?? logicalHeight;
-        const padding = 20;
-        const x = Math.max(boardX + padding, Math.min(boardX + (boardWidth - width) / 2, boardX + boardWidth - width - padding));
-        const y = Math.max(boardY + padding, Math.min(boardY + (boardHeight - height) / 2, boardY + boardHeight - height - padding));
-        const element: CanvasElement = {
-            id: crypto.randomUUID(),
-            type: 'p5',
-            name: p5Data.topic || 'P5.js Animation',
-            x: Math.round(x),
-            y: Math.round(y),
-            w: width,
-            h: height,
-            zIndex: elements.length + 10,
-            color: '#1a1a1a',
-            p5Data,
-        };
-        setElements(previous => [...previous, element]);
-        setSelectedIds([element.id]);
-    };
+    const {
+        handleAddPDFPage,
+        handleAddAllPDFPages,
+        handleInsertMindMap,
+        handleInsertP5,
+        handleAddBoard,
+    } = useCanvasInsertions({
+        elements,
+        activeBoardId: activeBoard?.id ?? null,
+        logicalWidth,
+        logicalHeight,
+        canvasConfig,
+        scale,
+        setElements,
+        setSelectedIds,
+        setSelectedBoardId,
+        setActiveTool,
+        setViewPos,
+        closePdfViewer: () => setShowPDFViewer(false),
+        closeMindMapGenerator: () => setIsMindMapGeneratorOpen(false),
+        closeP5Generator: () => setIsP5GeneratorOpen(false),
+    });
 
     return (
         <div className="flex h-screen w-full bg-background-light dark:bg-background-dark text-text-primary-light dark:text-text-primary-dark overflow-hidden transition-colors duration-200 select-none">
@@ -1336,38 +716,7 @@ export const DesignEditor = () => {
                         onLoadLayout={handleLoadLayoutTemplate}
                         onSaveLayout={handleSaveLayoutTemplate}
                         onDeleteLayout={handleDeleteLayoutTemplate}
-                        onAddPage={() => {
-                            // Find right-most boundary
-                            const maxX = elements.length > 0 ? Math.max(...elements.map(e => e.x + e.w)) : 0;
-                            const gap = 100;
-                            const newBoardX = maxX > 0 ? maxX + gap : getEffectiveDimensions(canvasConfig).width + gap;
-
-                            const newBoard = createContainerBoard({
-                                name: `Board ${elements.filter(e => e.type === 'container').length + 2}`, // +2 because Board 1 is implicit
-                                x: newBoardX,
-                                y: 0,
-                                w: getEffectiveDimensions(canvasConfig).width,
-                                h: getEffectiveDimensions(canvasConfig).height,
-                                color: '#ffffff',
-                                boardConfig: {
-                                    backgroundColor: '#ffffff',
-                                    borderRadius: canvasConfig.borderRadius,
-                                    showGrid: canvasConfig.showGrid,
-                                    gridRows: canvasConfig.gridRows,
-                                    gridCols: canvasConfig.gridCols,
-                                    showGuides: canvasConfig.showGuides,
-                                    bleed: canvasConfig.bleed,
-                                }
-                            });
-
-                            setElements(prev => [...prev, newBoard]);
-
-                            // Move view to new board center (properly centered in viewport)
-                            setViewPos(getCenteredViewPos(newBoardX + newBoard.w / 2, newBoard.h / 2));
-                            setSelectedIds([newBoard.id]);
-                            setSelectedBoardId(newBoard.id);
-                            setActiveTool('select');
-                        }}
+                        onAddPage={handleAddBoard}
                     />
                 )}
 
