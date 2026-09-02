@@ -43,6 +43,18 @@ const ALLOWED_FOREIGN_OBJECT_TAGS = new Set([
   'ul',
 ]);
 
+export const isUnsafeSvgAttribute = (name: string, value: string): boolean => {
+  const normalizedName = name.toLowerCase();
+  const normalizedValue = value.trim();
+  const isLinkAttribute = normalizedName === 'href' || normalizedName === 'xlink:href';
+
+  return normalizedName.startsWith('on')
+    || (isLinkAttribute && !normalizedValue.startsWith('#'))
+    || /(?:javascript|vbscript|data)\s*:/i.test(normalizedValue)
+    || /url\s*\(\s*(?!#)[^)]+\)/i.test(normalizedValue)
+    || /(?:expression\s*\(|@import)/i.test(normalizedValue);
+};
+
 const sanitizeForeignObjectElement = (foreignObject: Element) => {
   for (const element of Array.from(foreignObject.querySelectorAll('*')).reverse()) {
     const tag = element.tagName.toLowerCase();
@@ -55,11 +67,7 @@ const sanitizeForeignObjectElement = (foreignObject: Element) => {
       const name = attribute.name.toLowerCase();
       const value = attribute.value.trim();
       if (name === 'xmlns') continue;
-      if (
-        name.startsWith('on') ||
-        /(?:javascript|vbscript|data)\s*:/i.test(value) ||
-        (name === 'style' && (/url\s*\(\s*(?!#)[^)]+\)/i.test(value) || /@import/i.test(value)))
-      ) {
+      if (isUnsafeSvgAttribute(name, value)) {
         element.removeAttribute(attribute.name);
       }
     }
@@ -69,11 +77,7 @@ const sanitizeForeignObjectElement = (foreignObject: Element) => {
     const name = attribute.name.toLowerCase();
     const value = attribute.value.trim();
     const isGeometry = ['x', 'y', 'width', 'height', 'transform'].includes(name);
-    const hasUnsafeValue =
-      name.startsWith('on') ||
-      /(?:javascript|vbscript|data)\s*:/i.test(value) ||
-      (name === 'style' && (/url\s*\(\s*(?!#)[^)]+\)/i.test(value) || /@import/i.test(value)));
-    if (!isGeometry || hasUnsafeValue) {
+    if (!isGeometry || isUnsafeSvgAttribute(name, value)) {
       foreignObject.removeAttribute(attribute.name);
     }
   }
@@ -147,15 +151,7 @@ export const sanitizeMermaidSvg = (svg: string): string => {
     for (const attribute of Array.from(element.attributes)) {
       const name = attribute.name.toLowerCase();
       const value = attribute.value.trim();
-      const isLinkAttribute = name === 'href' || name === 'xlink:href';
-      const hasUnsafeCssUrl = /url\s*\(\s*(?!#)[^)]+\)/i.test(value);
-      if (
-        name.startsWith('on') ||
-        (isLinkAttribute && !value.startsWith('#')) ||
-        /(?:javascript|vbscript|data)\s*:/i.test(value) ||
-        hasUnsafeCssUrl ||
-        /(?:expression\s*\(|@import)/i.test(value)
-      ) {
+      if (isUnsafeSvgAttribute(name, value)) {
         element.removeAttribute(attribute.name);
       }
     }

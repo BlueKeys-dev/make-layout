@@ -5,6 +5,7 @@ Last updated: 2026-09-02
 ## Contributor documentation
 
 - `AGENTS.md` describes the repository structure, local commands, coding style, testing approach, and contribution expectations.
+- `plans/architecture-review-2026-09-02.html` records the current unstaged code-quality and architecture review.
 
 ## Application entry and state
 

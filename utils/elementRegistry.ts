@@ -1,4 +1,5 @@
-import type { CanvasElement, ElementType } from '../types';
+import { DEFAULT_CANVAS_CONFIG } from '../config/canvasDefaults';
+import type { BoardConfig, CanvasElement, ElementType } from '../types';
 
 /**
  * Element Registry & Factory
@@ -152,6 +153,52 @@ export const createElementFactory = (
       return base;
   }
 };
+
+export type ContainerBoardOptions = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  name: string;
+  color?: string;
+  locked?: boolean;
+  content?: string;
+  boardConfig?: Partial<BoardConfig>;
+};
+
+export const createContainerBoard = ({
+  x,
+  y,
+  w,
+  h,
+  name,
+  color = '#ffffff',
+  locked = false,
+  content,
+  boardConfig,
+}: ContainerBoardOptions): CanvasElement => ({
+  id: crypto.randomUUID(),
+  type: 'container',
+  x,
+  y,
+  w,
+  h,
+  color,
+  zIndex: 0,
+  name,
+  locked,
+  ...(content === undefined ? {} : { content }),
+  boardConfig: {
+    backgroundColor: color,
+    borderRadius: DEFAULT_CANVAS_CONFIG.borderRadius,
+    showGrid: DEFAULT_CANVAS_CONFIG.showGrid,
+    gridRows: DEFAULT_CANVAS_CONFIG.gridRows,
+    gridCols: DEFAULT_CANVAS_CONFIG.gridCols,
+    showGuides: DEFAULT_CANVAS_CONFIG.showGuides,
+    bleed: DEFAULT_CANVAS_CONFIG.bleed,
+    ...boardConfig,
+  },
+});
 
 export const getElementDefaultSize = (type: ElementType) => {
   const temp = createElementFactory(type, 0, 0, 0);

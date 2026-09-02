@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture review for make-layout</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { border-style: dashed; }
+      .deep { background: linear-gradient(135deg, #0f172a, #1e293b); }
+      .leak { color: #b91c1c; }
+      .arrow { color: #64748b; font-size: 1.4rem; }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-6xl mx-auto px-6 py-12 space-y-12">
+      <header class="space-y-5">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p class="text-xs uppercase tracking-[0.25em] text-emerald-700">make-layout · unstaged review</p>
+            <h1 class="mt-2 text-4xl font-semibold tracking-tight">Architecture &amp; code quality review</h1>
+          </div>
+          <p class="font-mono text-sm text-slate-500">2026-09-02</p>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-4">
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><div class="text-2xl font-semibold">1,470</div><div class="text-xs uppercase tracking-wider text-slate-500">root module lines</div></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><div class="text-2xl font-semibold">4</div><div class="text-xs uppercase tracking-wider text-slate-500">tracked files changed</div></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><div class="text-2xl font-semibold">9</div><div class="text-xs uppercase tracking-wider text-slate-500">new files in status</div></div>
+          <div class="rounded-xl border border-slate-200 bg-white p-4"><div class="text-2xl font-semibold">5</div><div class="text-xs uppercase tracking-wider text-slate-500">plans read first</div></div>
+        </div>
+        <div class="flex flex-wrap gap-4 text-xs text-slate-600">
+          <span><span class="inline-block h-3 w-3 rounded border border-slate-400 bg-white align-[-2px]"></span> module</span>
+          <span><span class="inline-block w-5 border-t-2 border-dashed border-slate-400 align-[3px]"></span> seam</span>
+          <span class="text-red-700">⟶ leakage</span>
+          <span><span class="inline-block h-3 w-3 rounded bg-slate-800 align-[-2px]"></span> deep module</span>
+        </div>
+      </header>
+
+      <section id="candidates" class="space-y-10">
+        <article id="candidate-editor" class="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm space-y-6">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div><p class="text-xs uppercase tracking-wider text-emerald-700">Candidate 01</p><h2 class="mt-1 text-2xl font-semibold">Finish the DesignEditor deepening</h2></div>
+            <span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Strong</span>
+          </div>
+          <div><p class="text-xs uppercase tracking-wider text-slate-500">Files</p><p class="mt-1 font-mono text-sm">components/DesignEditor.tsx:74-1470 · hooks/useCanvasPages.ts · hooks/useLayoutLibrary.ts · hooks/useDesignEditorWebMcp.ts · components/editor/DesignEditorModals.tsx</p></div>
+          <div class="grid gap-5 lg:grid-cols-2">
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+              <p class="text-xs uppercase tracking-wider text-slate-500">Before · shallow root</p>
+              <div class="rounded-lg border-2 border-slate-300 bg-white p-4 text-center text-sm">DesignEditor<br><span class="text-xs text-slate-500">pages · placement · PDF · chat · WebMCP · modals</span></div>
+              <div class="grid grid-cols-3 gap-2 text-center text-xs"><div class="seam rounded border border-slate-300 p-2">board</div><div class="seam rounded border border-slate-300 p-2">placement</div><div class="seam rounded border border-slate-300 p-2">agent writes</div></div>
+              <p class="text-xs text-red-700">Many seams converge on one implementation.</p>
+            </div>
+            <div class="deep rounded-xl p-4 text-white space-y-3">
+              <p class="text-xs uppercase tracking-wider text-slate-300">After · deep orchestration</p>
+              <div class="rounded-lg border-2 border-slate-400 p-4 text-center text-sm">DesignEditor<br><span class="text-xs text-slate-300">composition and state wiring only</span></div>
+              <div class="grid grid-cols-3 gap-2 text-center text-xs"><div class="rounded border border-slate-500 p-2">pages module</div><div class="rounded border border-slate-500 p-2">placement module</div><div class="rounded border border-slate-500 p-2">write module</div></div>
+              <p class="text-xs text-emerald-200">Each seam has locality and a test surface.</p>
+            </div>
+          </div>
+          <div class="grid gap-4 md:grid-cols-2"><div><p class="font-semibold">Problem</p><p class="mt-1 text-sm text-slate-600">The diff removes 472 net lines, but the root module still owns placement, imports, generators, interaction, and composition at 1,470 lines—well above the plan’s 800-line target.</p></div><div><p class="font-semibold">Solution</p><p class="mt-1 text-sm text-slate-600">Move placement/import orchestration into focused modules until the root only composes deep modules and passes state.</p></div></div>
+          <ul class="grid gap-2 text-sm text-slate-700 sm:grid-cols-2"><li>• depth: root becomes inevitable</li><li>• locality: placement bugs concentrate</li><li>• leverage: fewer root refs</li><li>• tests hit one interface</li></ul>
+        </article>
+
+        <article id="candidate-transaction" class="rounded-2xl border border-emerald-200 bg-white p-6 shadow-sm space-y-6">
+          <div class="flex flex-wrap items-start justify-between gap-3"><div><p class="text-xs uppercase tracking-wider text-emerald-700">Candidate 02</p><h2 class="mt-1 text-2xl font-semibold">Make WebMCP writes transactional</h2></div><span class="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800">Strong</span></div>
+          <div><p class="text-xs uppercase tracking-wider text-slate-500">Files</p><p class="mt-1 font-mono text-sm">hooks/useDesignEditorWebMcp.ts:79-204 · hooks/useCanvasPages.ts:62-69 · services/webmcp.ts:68-112 · services/canvasToolEngine.ts:27-38</p></div>
+          <div class="grid gap-5 lg:grid-cols-2">
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4"><p class="mb-3 text-xs uppercase tracking-wider text-slate-500">Before · sequential effects</p><pre class="mermaid text-xs">flowchart LR
+              O[tool outcome] --> R[remove]
+              R --> A[add]
+              A --> L[layout add]
+              L --> P[replace]
+              P --> C[several setElements calls]
+              P -. failure .-> X[partial state]</pre></div>
+            <div class="rounded-xl border border-slate-200 bg-white p-4"><p class="mb-3 text-xs uppercase tracking-wider text-slate-500">After · one commit</p><div class="mx-auto max-w-xs space-y-3 text-center text-sm"><div class="rounded border border-slate-300 p-3">tool outcome + confirmation</div><div class="arrow">↓</div><div class="deep rounded border-2 border-slate-700 p-4 text-white">deep canvas-write module<br><span class="text-xs text-slate-300">validate → derive → commit</span></div><div class="arrow">↓</div><div class="rounded border border-emerald-400 bg-emerald-50 p-3">one history snapshot</div></div></div>
+          </div>
+          <div class="grid gap-4 md:grid-cols-2"><div><p class="font-semibold">Problem</p><p class="mt-1 text-sm text-slate-600">The apply routine mutates through multiple <code>setElements</code> calls, so a later missing replacement or cancelled confirmation can leave earlier effects applied and history split across writes. Reads from <code>elementsRef.current</code> between those scheduled writes can also be stale.</p></div><div><p class="font-semibold">Solution</p><p class="mt-1 text-sm text-slate-600">Derive the complete next page and selection from one local snapshot after confirmation, then commit once through the canonical pages module.</p></div></div>
+          <ul class="grid gap-2 text-sm text-slate-700 sm:grid-cols-2"><li>• locality: one mutation seam</li><li>• leverage: atomic undo/redo</li><li>• depth: confirmation stays an adapter</li><li>• tests cover state transitions</li></ul>
+        </article>
+
+        <article id="candidate-placement" class="rounded-2xl border border-amber-200 bg-white p-6 shadow-sm space-y-6">
+          <div class="flex flex-wrap items-start justify-between gap-3"><div><p class="text-xs uppercase tracking-wider text-amber-700">Candidate 03</p><h2 class="mt-1 text-2xl font-semibold">Unify canvas placement ownership</h2></div><span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Worth exploring</span></div>
+          <div><p class="text-xs uppercase tracking-wider text-slate-500">Files</p><p class="mt-1 font-mono text-sm">components/DesignEditor.tsx:1110-1275 · utils/elementRegistry.ts:154-199 · utils/layoutTarget.ts:8-33</p></div>
+          <div class="grid gap-5 lg:grid-cols-2"><div class="rounded-xl border border-slate-200 bg-slate-50 p-4"><p class="mb-3 text-xs uppercase tracking-wider text-slate-500">Before · partial seam</p><div class="grid grid-cols-2 gap-2 text-center text-xs"><div class="seam rounded border border-slate-300 p-3">PDF placement</div><div class="seam rounded border border-slate-300 p-3">mindmap center</div><div class="seam rounded border border-slate-300 p-3">p5 center</div><div class="seam rounded border border-slate-300 p-3">add board</div></div><p class="mt-3 text-xs text-red-700">Same target and padding rules drift in the root.</p></div><div class="deep rounded-xl p-4 text-white"><p class="mb-3 text-xs uppercase tracking-wider text-slate-300">After · deep placement module</p><div class="mx-auto max-w-sm space-y-3 text-center text-sm"><div class="rounded border border-slate-500 p-3">placement intent</div><div class="arrow text-slate-300">↓</div><div class="rounded border-2 border-slate-400 p-4">target rect · overlap · z-index</div><div class="arrow text-slate-300">↓</div><div class="rounded border border-emerald-300 p-3">element at safe coordinates</div></div></div></div>
+          <div class="grid gap-4 md:grid-cols-2"><div><p class="font-semibold">Problem</p><p class="mt-1 text-sm text-slate-600">The new board factory centralizes object shape, but target selection, centering, padding, overlap checks, and z-index remain repeated in several root flows. The older container constructor still defines a second, diverging default set.</p></div><div><p class="font-semibold">Solution</p><p class="mt-1 text-sm text-slate-600">Give one module ownership of placement intent and geometry, and make one container constructor the canonical adapter for all board creation.</p></div></div>
+          <ul class="grid gap-2 text-sm text-slate-700 sm:grid-cols-2"><li>• locality: geometry has one home</li><li>• leverage: one rule, many flows</li><li>• seam: board target is explicit</li><li>• deletion test: remove duplicate defaults</li></ul>
+        </article>
+
+        <article id="candidate-tests" class="rounded-2xl border border-amber-200 bg-white p-6 shadow-sm space-y-6">
+          <div class="flex flex-wrap items-start justify-between gap-3"><div><p class="text-xs uppercase tracking-wider text-amber-700">Candidate 04</p><h2 class="mt-1 text-2xl font-semibold">Make the new test seam executable</h2></div><span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-800">Worth exploring</span></div>
+          <div><p class="text-xs uppercase tracking-wider text-slate-500">Files</p><p class="mt-1 font-mono text-sm">config/canvasDefaults.test.ts:1-3 · utils/contentSecurity.test.ts:1-3 · utils/layoutTarget.test.ts:1-5 · package.json</p></div>
+          <div class="grid gap-5 lg:grid-cols-2"><div class="rounded-xl border border-slate-200 bg-slate-50 p-4"><p class="mb-3 text-xs uppercase tracking-wider text-slate-500">Before · hidden adapter</p><div class="space-y-2 text-center text-sm"><div class="rounded border border-slate-300 bg-white p-3">new tests</div><div class="arrow">↓</div><div class="seam rounded border border-red-300 bg-red-50 p-3 text-red-800">npx tsx (not declared)<br>extensionless ESM imports</div><div class="arrow">↓</div><div class="rounded border border-slate-300 bg-white p-3">uncertain runner</div></div></div><div class="deep rounded-xl p-4 text-white"><p class="mb-3 text-xs uppercase tracking-wider text-slate-300">After · explicit runner</p><div class="mx-auto max-w-sm space-y-3 text-center text-sm"><div class="rounded border border-slate-500 p-3">package-local test command</div><div class="arrow text-slate-300">↓</div><div class="rounded border-2 border-slate-400 p-4">declared runner adapter</div><div class="arrow text-slate-300">↓</div><div class="rounded border border-emerald-300 p-3">tests execute through one interface</div></div></div></div>
+          <div class="grid gap-4 md:grid-cols-2"><div><p class="font-semibold">Problem</p><p class="mt-1 text-sm text-slate-600">The added tests import local TypeScript modules without extensions, while the package has no <code>tsx</code> dependency or test script. The proof seam is not reproducible from a fresh checkout.</p></div><div><p class="font-semibold">Solution</p><p class="mt-1 text-sm text-slate-600">Choose one declared runner and align import specifiers and package scripts with it; keep the decision small and explicit.</p></div></div>
+          <ul class="grid gap-2 text-sm text-slate-700 sm:grid-cols-2"><li>• locality: failures point to code</li><li>• leverage: one command proves all</li><li>• adapter: runner choice is visible</li><li>• no hidden network install</li></ul>
+        </article>
+      </section>
+
+      <section id="top-recommendation" class="rounded-2xl bg-slate-900 p-8 text-white shadow-xl">
+        <p class="text-xs uppercase tracking-[0.25em] text-emerald-300">Top recommendation</p>
+        <h2 class="mt-2 text-3xl font-semibold">Make WebMCP writes transactional</h2>
+        <p class="mt-3 max-w-3xl text-slate-300">This is the clearest code-judo move: one deep canvas-write module deletes partial-update behavior, gives undo/redo a single unit, and creates the strongest interface for tests. Then finish the root decomposition around that seam.</p>
+        <a class="mt-5 inline-block rounded-lg bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-300" href="#candidate-transaction">Jump to candidate 02 →</a>
+      </section>
+
+      <footer class="border-t border-slate-200 pt-5 text-xs text-slate-500">Evidence reviewed: unstaged status and diff, all five existing plan files, current source at cited lines, and the absence of CONTEXT.md and docs/adr/. No tests, builds, or linters were run.</footer>
+    </main>
+  </body>
+</html>

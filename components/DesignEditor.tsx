@@ -1,20 +1,14 @@
 import React, { useState, useRef, useEffect, useLayoutEffect, useCallback } from 'react';
-import { Moon, Sun, Crosshair, Trash2, BookOpen, AlertTriangle, X, Info, LockKeyhole, Unlock } from 'lucide-react';
-import { CanvasElement, ElementType, CanvasConfig, ChatMessage, LayoutPlan, AIModelId, LayoutTemplate } from '../types';
-import { INITIAL_ELEMENTS } from '../data';
-import { SECTIONS } from '../data';
+import { Moon, Sun, Crosshair, Trash2, BookOpen } from 'lucide-react';
+import { CanvasElement, ElementType, CanvasConfig, ChatMessage, LayoutPlan, AIModelId, P5Data } from '../types';
 import { DEFAULT_CANVAS_CONFIG, getEffectiveDimensions, getSafeZones, loadCanvasConfig, saveCanvasConfig } from '../config/canvasDefaults';
 import { PropertiesPanel } from './PropertiesPanel';
 import { processChatMessage, quickGenerateLayout } from '../services/chatai';
 import { useCanvasInteraction } from '../hooks/useCanvasInteraction';
 import { FloatingToolbar } from './FloatingToolbar';
-import { MindMapGenerator } from './MindMapGenerator';
-import { P5Generator } from './P5Generator';
-import { AnimationHome } from './animationhome';
 import { MultiAIChatPanel } from './chat';
 import { CanvasSettingsBar } from './CanvasSettingsBar';
-import { ElementCreationDialog } from './ElementCreationDialog';
-import { createElementFactory, getElementDefaultSize } from '../utils/elementRegistry';
+import { createContainerBoard, createElementFactory, getElementDefaultSize } from '../utils/elementRegistry';
 import { getDefaultModel } from '../services/aiProviders';
 
 // Refactored Imports
@@ -22,21 +16,14 @@ import { EditorHeader } from './editor/EditorHeader';
 import { EditorFooter } from './editor/EditorFooter';
 import { CanvasStage } from './canvas/CanvasStage';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
-import { useHistory } from '../hooks/useHistory';
-import { PDFViewer } from './PDFViewer';
+import { useCanvasPages } from '../hooks/useCanvasPages';
+import { useLayoutLibrary } from '../hooks/useLayoutLibrary';
 import { SHAPES } from './ShapeLibrary';
 import { ShapeType } from '../types';
 import { CanvasToolOutcome } from '../services/canvasToolEngine';
 import { CanvasToolName } from '../services/canvasToolCatalog';
-import { registerDesignTools } from '../services/webmcp';
-import {
-    createUserLayoutTemplate,
-    deleteUserLayoutTemplate,
-    getLayoutTemplates,
-    instantiateLayoutTemplate,
-    loadUserLayoutTemplates,
-    storeUserLayoutTemplates,
-} from '../services/layoutTemplates';
+import { useDesignEditorWebMcp } from '../hooks/useDesignEditorWebMcp';
+import { DesignEditorModals, type ConfirmDeleteState } from './editor/DesignEditorModals';
 
 type Bounds = { x: number; y: number; w: number; h: number };
 
@@ -84,61 +71,19 @@ const getInitialViewPosition = () => {
     return { x: -width / 2, y: -height / 2 };
 };
 
-const normalizeContainerBoard = (element: CanvasElement): CanvasElement => {
-    if (element.type !== 'container') return element;
-    return {
-        ...element,
-        boardConfig: {
-            ...element.boardConfig,
-            showGuides: element.boardConfig?.showGuides ?? DEFAULT_CANVAS_CONFIG.showGuides,
-            bleed: element.boardConfig?.bleed ?? DEFAULT_CANVAS_CONFIG.bleed,
-        },
-    };
-};
-
-const normalizePages = (pages: CanvasElement[][]): CanvasElement[][] =>
-    pages.map(page => page.map(normalizeContainerBoard));
-
-const getInitialPages = (): CanvasElement[][] => {
-    try {
-        const saved = localStorage.getItem('ai-layout-pages');
-        if (saved) return normalizePages(JSON.parse(saved));
-    } catch (e) {
-        console.warn('Persistence Error', e);
-    }
-    return [INITIAL_ELEMENTS];
-};
-
 export const DesignEditor = () => {
     const {
-        state: pages,
-        setState: setPages,
+        pages,
+        setPages,
+        currentPage,
+        setCurrentPage,
+        elements,
+        setElements,
         undo,
         redo,
         canUndo,
         canRedo
-    } = useHistory<CanvasElement[][]>(getInitialPages());
-
-    useEffect(() => {
-        try { localStorage.setItem('ai-layout-pages', JSON.stringify(pages)); } catch (e) { }
-    }, [pages]);
-
-    const [currentPage, setCurrentPage] = useState(0);
-    const elements = pages[currentPage] ?? pages[pages.length - 1] ?? [];
-    const [layoutLibrary, setLayoutLibrary] = useState(() => getLayoutTemplates());
-
-    // Helper: Update elements for current page
-    const setElements = useCallback((
-        value: CanvasElement[] | ((prev: CanvasElement[]) => CanvasElement[]),
-        shouldPush = true
-    ) => {
-        setPages(prevPages => {
-            const newPages = [...prevPages];
-            const nextElements = typeof value === 'function' ? value(newPages[currentPage]) : value;
-            newPages[currentPage] = nextElements;
-            return newPages;
-        }, shouldPush);
-    }, [currentPage, setPages]);
+    } = useCanvasPages();
 
     // -- Interaction State --
     const [activeTool, setActiveTool] = useState('select');
@@ -184,7 +129,7 @@ export const DesignEditor = () => {
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [activeModelId, setActiveModelId] = useState<AIModelId>(getDefaultModel().id);
     const [pendingPlan, setPendingPlan] = useState<LayoutPlan | null>(null);
-    const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; title: string; confirmLabel?: string; onConfirm: () => void; onCancel?: () => void } | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState<ConfirmDeleteState | null>(null);
     const [isUiLocked, setIsUiLocked] = useState(false);
 
     const canvasRef = useRef<HTMLDivElement>(null);
@@ -207,8 +152,6 @@ export const DesignEditor = () => {
     const uiLockedRef = useRef(false);
     const canvasRevisionRef = useRef(0);
     const previousCanvasRef = useRef({ pages, currentPage, canvasConfig });
-    const webMcpRegistrationEpochRef = useRef(0);
-    const applyCanvasToolOutcomeRef = useRef<((outcome: CanvasToolOutcome, signal: AbortSignal, announce: boolean) => Promise<{ success: boolean; revision: number; error?: { code: string; message: string } }>) | undefined>(undefined);
     const marqueeRectRef = useRef<Bounds | null>(null);
     const [marqueeRect, setMarqueeRect] = useState<Bounds | null>(null);
     const { width: logicalWidth, height: logicalHeight } = getEffectiveDimensions(canvasConfig);
@@ -224,70 +167,6 @@ export const DesignEditor = () => {
 
     const selectedElement = elements.find(e => selectedIds.includes(e.id));
     const isSelected = (id: string) => selectedIds.includes(id);
-
-    const refreshLayoutLibrary = useCallback((error: string | null = null) => {
-        try {
-            const next = getLayoutTemplates();
-            setLayoutLibrary({ templates: next.templates, error: error || next.error });
-        } catch (refreshError: any) {
-            console.error('[Layouts] Failed to refresh layout library:', refreshError);
-            setLayoutLibrary(previous => ({ ...previous, error: error || 'Saved layouts could not be refreshed.' }));
-        }
-    }, []);
-
-    const handleLoadLayoutTemplate = useCallback((template: LayoutTemplate) => {
-        try {
-            const targetBoard = activeBoardIdRef.current
-                ? elementsRef.current.find(element => element.id === activeBoardIdRef.current && element.type === 'container')
-                : undefined;
-            if (activeBoardIdRef.current && !targetBoard) throw new Error('The selected board no longer exists. Select it again.');
-            const target = targetBoard
-                ? { x: targetBoard.x, y: targetBoard.y, width: targetBoard.w, height: targetBoard.h }
-                : { x: 0, y: 0, width: logicalWidth, height: logicalHeight };
-            const zIndexStart = elementsRef.current.reduce((max, element) => Math.max(max, element.zIndex), 0) + 1;
-            const layoutElements = instantiateLayoutTemplate(template, target, zIndexStart);
-            setElements(previous => [...previous, ...layoutElements]);
-            setActiveTool('select');
-            setLayoutLibrary(previous => ({ ...previous, error: null }));
-            return true;
-        } catch (loadError: any) {
-            console.error('[Layouts] Failed to load layout:', loadError);
-            setLayoutLibrary(previous => ({ ...previous, error: loadError?.message || 'Layout could not be loaded.' }));
-            return false;
-        }
-    }, [logicalHeight, logicalWidth, setElements]);
-
-    const handleSaveLayoutTemplate = useCallback((name: string) => {
-        try {
-            const targetBoard = activeBoardIdRef.current
-                ? elementsRef.current.find(element => element.id === activeBoardIdRef.current && element.type === 'container')
-                : undefined;
-            if (activeBoardIdRef.current && !targetBoard) throw new Error('The selected board no longer exists. Select it again.');
-            const target = targetBoard
-                ? { x: targetBoard.x, y: targetBoard.y, width: targetBoard.w, height: targetBoard.h }
-                : { x: 0, y: 0, width: logicalWidth, height: logicalHeight };
-            const template = createUserLayoutTemplate(name, elementsRef.current, target);
-            const saved = loadUserLayoutTemplates();
-            storeUserLayoutTemplates([...saved.templates, template]);
-            refreshLayoutLibrary(saved.error);
-            return true;
-        } catch (saveError: any) {
-            console.error('[Layouts] Failed to save layout:', saveError);
-            setLayoutLibrary(previous => ({ ...previous, error: saveError?.message || 'Layout could not be saved.' }));
-            return false;
-        }
-    }, [logicalHeight, logicalWidth, refreshLayoutLibrary]);
-
-    const handleDeleteLayoutTemplate = useCallback((templateId: string) => {
-        if (!window.confirm('Delete this saved layout?')) return;
-        try {
-            deleteUserLayoutTemplate(templateId);
-            refreshLayoutLibrary();
-        } catch (deleteError: any) {
-            console.error('[Layouts] Failed to delete layout:', deleteError);
-            setLayoutLibrary(previous => ({ ...previous, error: deleteError?.message || 'Layout could not be deleted.' }));
-        }
-    }, [refreshLayoutLibrary]);
 
     // -- Board Selection State --
     const [selectedBoardId, setSelectedBoardId] = useState<string | 'primary'>('primary');
@@ -319,6 +198,20 @@ export const DesignEditor = () => {
     selectedIdsRef.current = selectedIds;
     activeBoardIdRef.current = activeBoard?.id || null;
     uiLockedRef.current = isUiLocked;
+
+    const {
+        layoutLibrary,
+        handleLoadLayoutTemplate,
+        handleSaveLayoutTemplate,
+        handleDeleteLayoutTemplate,
+    } = useLayoutLibrary({
+        elementsRef,
+        activeBoardIdRef,
+        logicalWidth,
+        logicalHeight,
+        setElements,
+        setActiveTool,
+    });
 
     useLayoutEffect(() => {
         if (
@@ -945,169 +838,26 @@ export const DesignEditor = () => {
         });
     }), []);
 
-    const applyCanvasToolOutcome = useCallback(async (
-        outcome: CanvasToolOutcome,
-        signal: AbortSignal,
-        announce: boolean,
-    ): Promise<{ success: boolean; revision: number; error?: { code: string; message: string } }> => {
-        const effects = outcome.effects;
-        if (!effects) return { success: true, revision: canvasRevisionRef.current };
-        signal.throwIfAborted();
-
-        const expectedRevision = effects.expectedRevision;
-        if (announce && expectedRevision !== undefined && !uiLockedRef.current) {
-            return { success: false, revision: canvasRevisionRef.current, error: { code: 'UI_NOT_LOCKED', message: 'The UI lock expired or was released before the canvas write completed.' } };
-        }
-        if (expectedRevision !== undefined && expectedRevision !== canvasRevisionRef.current) {
-            return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: `Canvas revision changed to ${canvasRevisionRef.current}; capture it again.` } };
-        }
-
-        if (effects.uiLocked !== undefined) setIsUiLocked(effects.uiLocked);
-
-        if (effects.elementIdToRemove) {
-            if (confirmDelete?.isOpen) {
-                return { success: false, revision: canvasRevisionRef.current, error: { code: 'CONFIRMATION_BUSY', message: 'Another confirmation is already open.' } };
-            }
-            const target = elementsRef.current.find(element => element.id === effects.elementIdToRemove);
-            if (!target) return { success: false, revision: canvasRevisionRef.current, error: { code: 'ELEMENT_NOT_FOUND', message: 'The element no longer exists.' } };
-            const reason = effects.removalReason ? ` Reason: ${effects.removalReason}` : '';
-            const confirmed = await requestConfirmation(`Remove "${target.name}" from the canvas?${reason}`, signal);
-            signal.throwIfAborted();
-            if (!confirmed) return { success: false, revision: canvasRevisionRef.current, error: { code: 'USER_CANCELLED', message: 'The user cancelled or did not confirm removal.' } };
-            if (announce && !uiLockedRef.current) {
-                return { success: false, revision: canvasRevisionRef.current, error: { code: 'UI_NOT_LOCKED', message: 'The UI lock expired or was released while confirmation was open.' } };
-            }
-            if (expectedRevision !== canvasRevisionRef.current) {
-                return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: 'The canvas changed while confirmation was open.' } };
-            }
-            setElements(previous => previous.filter(element => element.id !== target.id));
-            setSelectedIds(selectedIdsRef.current.filter(id => id !== target.id));
-        }
-
-        if (effects.elementToAdd) {
-            const offsetX = announce ? 0 : activeBoard?.x ?? 0;
-            const offsetY = announce ? 0 : activeBoard?.y ?? 0;
-            const element = { ...effects.elementToAdd, x: effects.elementToAdd.x + offsetX, y: effects.elementToAdd.y + offsetY };
-            setElements(previous => [...previous, element]);
-            setSelectedIds([element.id]);
-        }
-
-        if (effects.layoutElementsToAdd) {
-            const layoutElements = effects.layoutElementsToAdd;
-            setElements(previous => [...previous, ...layoutElements]);
-            setSelectedIds(layoutElements.map(element => element.id));
-        }
-
-        if (effects.elementReplacement) {
-            const replacement = effects.elementReplacement;
-            const currentElement = elementsRef.current.find(element => element.id === replacement.id);
-            if (!currentElement) {
-                return { success: false, revision: canvasRevisionRef.current, error: { code: 'ELEMENT_NOT_FOUND', message: 'The layout slot no longer exists.' } };
-            }
-            const replacesFilledSlot = announce
-                && currentElement.layoutSlot?.role !== null
-                && currentElement.layoutSlot?.role !== replacement.layoutSlot?.role;
-            if (replacesFilledSlot) {
-                if (confirmDelete?.isOpen) {
-                    return { success: false, revision: canvasRevisionRef.current, error: { code: 'CONFIRMATION_BUSY', message: 'Another confirmation is already open.' } };
-                }
-                const confirmed = await requestConfirmation(
-                    `Replace the current ${currentElement.layoutSlot?.role} content in "${currentElement.name}" with ${replacement.layoutSlot?.role}?`,
-                    signal,
-                    'Yes, Replace Content',
-                );
-                signal.throwIfAborted();
-                if (!confirmed) return { success: false, revision: canvasRevisionRef.current, error: { code: 'USER_CANCELLED', message: 'The user cancelled or did not confirm slot replacement.' } };
-                if (!uiLockedRef.current) {
-                    return { success: false, revision: canvasRevisionRef.current, error: { code: 'UI_NOT_LOCKED', message: 'The UI lock expired or was released while confirmation was open.' } };
-                }
-                if (expectedRevision !== canvasRevisionRef.current) {
-                    return { success: false, revision: canvasRevisionRef.current, error: { code: 'STALE_CANVAS', message: 'The canvas changed while confirmation was open.' } };
-                }
-            }
-            setElements(previous => previous.map(element => element.id === replacement.id ? replacement : element));
-            setSelectedIds([replacement.id]);
-        }
-
-        if (effects.diagramCode) {
-            const centerX = -viewPosRef.current.x + (window.innerWidth / 2) / scaleRef.current;
-            const centerY = -viewPosRef.current.y + (window.innerHeight / 2) / scaleRef.current;
-            const diagram: CanvasElement = {
-                id: crypto.randomUUID(),
-                type: 'mindmap',
-                name: effects.diagramType ? `AI ${effects.diagramType}` : 'AI Diagram',
-                x: centerX - 250,
-                y: centerY - 200,
-                w: 500,
-                h: 400,
-                zIndex: elementsRef.current.reduce((max, element) => Math.max(max, element.zIndex), 0) + 1,
-                color: 'transparent',
-                mermaidCode: effects.diagramCode,
-            };
-            setElements(previous => [...previous, diagram]);
-            setSelectedIds([diagram.id]);
-        }
-
-        if (effects.pendingPlan) setPendingPlan(effects.pendingPlan);
-
-        if (announce) {
-            addChatMessage('system', outcome.message, effects.pendingPlan, effects.imageSearchResults);
-        }
-
-        await new Promise<void>((resolve, reject) => {
-            if (signal.aborted) {
-                reject(signal.reason);
-                return;
-            }
-            const frame = requestAnimationFrame(() => {
-                signal.removeEventListener('abort', handleAbort);
-                resolve();
-            });
-            const handleAbort = () => {
-                cancelAnimationFrame(frame);
-                reject(signal.reason);
-            };
-            signal.addEventListener('abort', handleAbort, { once: true });
-        });
-
-        return { success: true, revision: canvasRevisionRef.current };
-    }, [activeBoard, addChatMessage, confirmDelete?.isOpen, requestConfirmation, setElements, setSelectedIds]);
-
-    applyCanvasToolOutcomeRef.current = applyCanvasToolOutcome;
-
-    useEffect(() => {
-        const epoch = ++webMcpRegistrationEpochRef.current;
-        const lifecycleController = new AbortController();
-        const bridge = {
-            getContext: () => ({
-                elements: elementsRef.current,
-                canvasConfig: canvasConfigRef.current,
-                currentPage: currentPageRef.current,
-                pageCount: pageCountRef.current,
-                selectedIds: selectedIdsRef.current,
-                activeBoardId: activeBoardIdRef.current,
-                revision: canvasRevisionRef.current,
-                uiLocked: uiLockedRef.current,
-                requireUiLock: true,
-            }),
-            applyOutcome: (outcome: CanvasToolOutcome, signal: AbortSignal) => {
-                const apply = applyCanvasToolOutcomeRef.current;
-                if (!apply) return Promise.resolve({ success: false, revision: canvasRevisionRef.current, error: { code: 'EDITOR_NOT_READY', message: 'The editor is not ready.' } });
-                return apply(outcome, signal, true);
-            },
-        };
-
-        void registerDesignTools(bridge, lifecycleController).catch(error => {
-            if (epoch === webMcpRegistrationEpochRef.current) {
-                console.error('[WebMCP] Tool registration failed.', error);
-            }
-        });
-
-        return () => {
-            webMcpRegistrationEpochRef.current += 1;
-            lifecycleController.abort();
-        };
-    }, []);
+    const { applyCanvasToolOutcome } = useDesignEditorWebMcp({
+        elementsRef,
+        canvasConfigRef,
+        currentPageRef,
+        pageCountRef,
+        selectedIdsRef,
+        activeBoardIdRef,
+        uiLockedRef,
+        canvasRevisionRef,
+        scaleRef,
+        viewPosRef,
+        activeBoard,
+        confirmationOpen: Boolean(confirmDelete?.isOpen),
+        requestConfirmation,
+        setElements,
+        setSelectedIds,
+        setIsUiLocked,
+        setPendingPlan,
+        addChatMessage,
+    });
 
     const handleStopGeneration = () => {
         if (abortControllerRef.current) {
@@ -1357,119 +1107,198 @@ export const DesignEditor = () => {
         }
     }, [selectedBoardId, activeBoard, pages, currentPage, setPages, setElements, elements.length]);
 
+    const handleAddPDFPage = (text: string, pageNumber: number) => {
+        const boardX = elements.length > 0 ? Math.max(...elements.map(element => element.x + element.w)) + 100 : 100;
+        const boardY = 100;
+        const board = createContainerBoard({
+            x: boardX,
+            y: boardY,
+            w: 600,
+            h: 800,
+            color: '#ffffff',
+            name: `PDF Page ${pageNumber}`,
+            content: 'board',
+            boardConfig: {
+                backgroundColor: '#ffffff',
+                gridCols: 12,
+                gridRows: 12,
+                showGrid: true,
+                showGuides: DEFAULT_CANVAS_CONFIG.showGuides,
+                bleed: DEFAULT_CANVAS_CONFIG.bleed,
+            },
+        });
+        const textElement: CanvasElement = {
+            id: `text-${Date.now()}`,
+            type: 'text',
+            x: boardX + 40,
+            y: boardY + 40,
+            w: 500,
+            h: 700,
+            color: '#000000',
+            zIndex: 1,
+            name: `Page ${pageNumber} Text`,
+            content: text,
+            textStyle: { fontSize: 14, fontFamily: 'Inter', textAlign: 'left', lineHeight: 1.5 },
+        };
+
+        setElements(previous => [...previous, board, textElement]);
+        setShowPDFViewer(false);
+        setViewPos(getCenteredViewPos(boardX + board.w / 2, boardY + board.h / 2));
+    };
+
+    const handleAddAllPDFPages = (pdfPages: Array<{ text: string; pageNumber: number }>) => {
+        const startX = elements.length > 0
+            ? Math.max(...elements.map(element => element.x + element.w)) + 100
+            : 100;
+        const boardY = 100;
+        const newElements: CanvasElement[] = [];
+
+        pdfPages.forEach((page, index) => {
+            const boardX = startX + index * 700;
+            const board = createContainerBoard({
+                x: boardX,
+                y: boardY,
+                w: 600,
+                h: 800,
+                color: '#ffffff',
+                name: `PDF Page ${page.pageNumber}`,
+                content: 'board',
+                boardConfig: { backgroundColor: '#ffffff', gridCols: 12, gridRows: 12, showGrid: true },
+            });
+            const textElement: CanvasElement = {
+                id: `text-${Date.now()}-${index}`,
+                type: 'text',
+                x: boardX + 40,
+                y: boardY + 40,
+                w: 500,
+                h: 700,
+                color: '#000000',
+                zIndex: 1,
+                name: `Page ${page.pageNumber} Text`,
+                content: page.text,
+                textStyle: { fontSize: 14, fontFamily: 'Inter', textAlign: 'left', lineHeight: 1.5 },
+            };
+            newElements.push(board, textElement);
+        });
+
+        setElements(previous => [...previous, ...newElements]);
+        setShowPDFViewer(false);
+        if (newElements.length > 0) {
+            const firstBoard = newElements[0];
+            setViewPos(getCenteredViewPos(firstBoard.x + firstBoard.w / 2, firstBoard.y + firstBoard.h / 2));
+        }
+    };
+
+    const handleInsertMindMap = (mermaidCode: string) => {
+        setIsMindMapGeneratorOpen(false);
+        const initialWidth = 400;
+        const initialHeight = 300;
+        const boardX = activeBoard?.x ?? 0;
+        const boardY = activeBoard?.y ?? 0;
+        const boardWidth = activeBoard?.w ?? logicalWidth;
+        const boardHeight = activeBoard?.h ?? logicalHeight;
+        const boardCenterX = boardX + boardWidth / 2;
+        const boardCenterY = boardY + boardHeight / 2;
+        const padding = 20;
+        let elementX = Math.max(boardX + padding, Math.min(boardCenterX - initialWidth / 2, boardX + boardWidth - initialWidth - padding));
+        let elementY = Math.max(boardY + padding, Math.min(boardCenterY - initialHeight / 2, boardY + boardHeight - initialHeight - padding));
+        const overlaps = (x: number, y: number) => elements.some(element =>
+            element.type !== 'container'
+            && x < element.x + element.w
+            && x + initialWidth > element.x
+            && y < element.y + element.h
+            && y + initialHeight > element.y);
+
+        if (overlaps(elementX, elementY)) {
+            const offsets = [
+                { x: 50, y: 50 }, { x: -50, y: 50 },
+                { x: 50, y: -50 }, { x: -50, y: -50 },
+                { x: 100, y: 0 }, { x: 0, y: 100 },
+                { x: -100, y: 0 }, { x: 0, y: -100 },
+            ];
+            for (const offset of offsets) {
+                const candidateX = boardCenterX - initialWidth / 2 + offset.x;
+                const candidateY = boardCenterY - initialHeight / 2 + offset.y;
+                const insideBoard = candidateX >= boardX + padding
+                    && candidateX + initialWidth <= boardX + boardWidth - padding
+                    && candidateY >= boardY + padding
+                    && candidateY + initialHeight <= boardY + boardHeight - padding;
+                if (insideBoard && !overlaps(candidateX, candidateY)) {
+                    elementX = candidateX;
+                    elementY = candidateY;
+                    break;
+                }
+            }
+        }
+
+        const element: CanvasElement = {
+            id: crypto.randomUUID(),
+            type: 'mindmap',
+            name: 'Mind Map',
+            x: Math.round(elementX),
+            y: Math.round(elementY),
+            w: initialWidth,
+            h: initialHeight,
+            zIndex: elements.length + 10,
+            color: 'transparent',
+            mermaidCode,
+        };
+        setElements(previous => [...previous, element]);
+        setSelectedIds([element.id]);
+    };
+
+    const handleInsertP5 = (p5Data: P5Data) => {
+        setIsP5GeneratorOpen(false);
+        const width = 500;
+        const height = 400;
+        const boardX = activeBoard?.x ?? 0;
+        const boardY = activeBoard?.y ?? 0;
+        const boardWidth = activeBoard?.w ?? logicalWidth;
+        const boardHeight = activeBoard?.h ?? logicalHeight;
+        const padding = 20;
+        const x = Math.max(boardX + padding, Math.min(boardX + (boardWidth - width) / 2, boardX + boardWidth - width - padding));
+        const y = Math.max(boardY + padding, Math.min(boardY + (boardHeight - height) / 2, boardY + boardHeight - height - padding));
+        const element: CanvasElement = {
+            id: crypto.randomUUID(),
+            type: 'p5',
+            name: p5Data.topic || 'P5.js Animation',
+            x: Math.round(x),
+            y: Math.round(y),
+            w: width,
+            h: height,
+            zIndex: elements.length + 10,
+            color: '#1a1a1a',
+            p5Data,
+        };
+        setElements(previous => [...previous, element]);
+        setSelectedIds([element.id]);
+    };
+
     return (
         <div className="flex h-screen w-full bg-background-light dark:bg-background-dark text-text-primary-light dark:text-text-primary-dark overflow-hidden transition-colors duration-200 select-none">
-            {/* Modals */}
-            <ElementCreationDialog
-                isOpen={isAddMenuOpen}
-                onClose={() => setIsAddMenuOpen(false)}
-                onSelectType={initiatePlacement}
+            <DesignEditorModals
+                isAddMenuOpen={isAddMenuOpen}
+                onCloseAddMenu={() => setIsAddMenuOpen(false)}
+                onSelectElementType={initiatePlacement}
+                showDocs={showDocs}
+                onCloseDocs={() => setShowDocs(false)}
+                confirmDelete={confirmDelete}
+                onCloseConfirmDelete={() => setConfirmDelete(null)}
+                isUiLocked={isUiLocked}
+                onUnlockUi={() => setIsUiLocked(false)}
+                showPDFViewer={showPDFViewer}
+                onClosePDFViewer={() => setShowPDFViewer(false)}
+                onAddPDFPage={handleAddPDFPage}
+                onAddAllPDFPages={handleAddAllPDFPages}
+                isMindMapGeneratorOpen={isMindMapGeneratorOpen}
+                onCloseMindMapGenerator={() => setIsMindMapGeneratorOpen(false)}
+                onInsertMindMap={handleInsertMindMap}
+                isAnimationHomeOpen={isAnimationHomeOpen}
+                onCloseAnimationHome={closeAnimationHome}
+                isP5GeneratorOpen={isP5GeneratorOpen}
+                onCloseP5Generator={() => setIsP5GeneratorOpen(false)}
+                onInsertP5={handleInsertP5}
             />
-
-            {showDocs && (
-                <div className="absolute inset-0 z-[100] bg-black/40 backdrop-blur-xl flex items-center justify-center p-6 md:p-20 animate-in fade-in duration-300" onClick={() => setShowDocs(false)}>
-                    <div
-                        className="bg-surface-dark/80 w-full max-w-5xl h-full max-h-[80vh] rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col md:flex-row backdrop-blur-3xl animate-in zoom-in-95 duration-300"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        {/* Sidebar */}
-                        <div className="w-full md:w-64 bg-black/20 border-b md:border-b-0 md:border-r border-white/5 p-6 flex flex-col gap-6">
-                            <div className="flex items-center gap-3 text-primary">
-                                <Info size={24} />
-                                <h2 className="text-xl font-bold tracking-tight">Help Center</h2>
-                            </div>
-                            <nav className="flex flex-col gap-1">
-                                {SECTIONS.map(s => (
-                                    <button
-                                        key={s.id}
-                                        onClick={() => {
-                                            const el = document.getElementById(`doc-section-${s.id}`);
-                                            el?.scrollIntoView({ behavior: 'smooth' });
-                                        }}
-                                        className="text-left px-3 py-2 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-all truncate"
-                                    >
-                                        {s.title}
-                                    </button>
-                                ))}
-                            </nav>
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 p-8 md:p-12 overflow-y-auto scrollbar-thin scrollbar-thumb-white/10">
-                            {SECTIONS.map(s => (
-                                <section key={s.id} id={`doc-section-${s.id}`} className="mb-16 last:mb-0">
-                                    <h3 className="text-2xl font-bold text-white mb-4 flex items-center gap-2 group">
-                                        <span className="w-1 h-6 bg-primary rounded-full group-hover:h-8 transition-all" />
-                                        {s.title}
-                                    </h3>
-                                    <div className="text-slate-400 leading-relaxed text-lg whitespace-pre-line bg-white/5 p-6 rounded-2xl border border-white/5">
-                                        {s.content}
-                                    </div>
-                                </section>
-                            ))}
-                        </div>
-
-                        <button
-                            onClick={() => setShowDocs(false)}
-                            className="absolute top-6 right-6 p-2 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-all"
-                        >
-                            <X size={20} />
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {confirmDelete?.isOpen && (
-                <div className="fixed inset-0 z-[200] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200" onClick={() => { confirmDelete.onCancel?.(); setConfirmDelete(null); }}>
-                    <div
-                        className="bg-surface-dark w-full max-w-md rounded-3xl border border-red-500/20 shadow-[0_0_50px_rgba(239,68,68,0.1)] overflow-hidden animate-in zoom-in-95 duration-200"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <div className="p-8 text-center">
-                            <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                                <AlertTriangle size={40} className="text-red-500" />
-                            </div>
-                            <h3 className="text-2xl font-bold text-white mb-3">Are you sure?</h3>
-                            <p className="text-slate-400 text-lg leading-relaxed mb-8">
-                                {confirmDelete.title}
-                            </p>
-                            <div className="flex flex-col gap-3">
-                                <button
-                                    onClick={confirmDelete.onConfirm}
-                                    className="w-full py-4 bg-red-500 hover:bg-red-600 text-white rounded-2xl font-bold text-lg transition-all shadow-lg shadow-red-500/20 active:scale-[0.98]"
-                                >
-                                    {confirmDelete.confirmLabel || 'Yes, Delete Permanently'}
-                                </button>
-                                <button
-                                    onClick={() => { confirmDelete.onCancel?.(); setConfirmDelete(null); }}
-                                    className="w-full py-4 bg-white/5 hover:bg-white/10 text-white rounded-2xl font-bold text-lg transition-all active:scale-[0.98]"
-                                >
-                                    Cancel
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {isUiLocked && (
-                <div className="fixed inset-0 z-[150] bg-slate-950/35 backdrop-blur-[2px] flex items-start justify-center pt-5">
-                    <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-amber-400/30 bg-slate-950/95 px-5 py-3 text-amber-100 shadow-2xl">
-                        <LockKeyhole size={18} className="text-amber-400" />
-                        <div>
-                            <div className="text-sm font-bold">Agent UI lock is active</div>
-                            <div className="text-xs text-slate-400">Human editing is paused. This automatically unlocks after five minutes.</div>
-                        </div>
-                        <button
-                            onClick={() => setIsUiLocked(false)}
-                            className="ml-2 flex items-center gap-2 rounded-xl bg-amber-400 px-3 py-2 text-xs font-bold text-slate-950 hover:bg-amber-300"
-                        >
-                            <Unlock size={14} />
-                            Unlock
-                        </button>
-                    </div>
-                </div>
-            )}
 
             {/* Main Workspace */}
             <div
@@ -1513,17 +1342,13 @@ export const DesignEditor = () => {
                             const gap = 100;
                             const newBoardX = maxX > 0 ? maxX + gap : getEffectiveDimensions(canvasConfig).width + gap;
 
-                            const newBoard: CanvasElement = {
-                                id: crypto.randomUUID(),
-                                type: 'container',
+                            const newBoard = createContainerBoard({
                                 name: `Board ${elements.filter(e => e.type === 'container').length + 2}`, // +2 because Board 1 is implicit
                                 x: newBoardX,
                                 y: 0,
                                 w: getEffectiveDimensions(canvasConfig).width,
                                 h: getEffectiveDimensions(canvasConfig).height,
                                 color: '#ffffff',
-                                zIndex: 0, // Background layer
-                                locked: false,
                                 boardConfig: {
                                     backgroundColor: '#ffffff',
                                     borderRadius: canvasConfig.borderRadius,
@@ -1533,7 +1358,7 @@ export const DesignEditor = () => {
                                     showGuides: canvasConfig.showGuides,
                                     bleed: canvasConfig.bleed,
                                 }
-                            };
+                            });
 
                             setElements(prev => [...prev, newBoard]);
 
@@ -1640,303 +1465,6 @@ export const DesignEditor = () => {
                 )}
             </div>
 
-            {/* PDF Viewer Modal */}
-            {/* PDF Viewer Modal - Always mounted to preserve state/cache */}
-            <div className={`fixed inset-0 z-[60] bg-black/60 backdrop-blur-md flex items-center justify-center p-4 md:p-12 transition-all duration-200 ${showPDFViewer ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
-                <div className={`bg-surface-dark w-full max-w-7xl h-full rounded-2xl border border-border-dark shadow-2xl overflow-hidden flex flex-col relative transition-all duration-200 ${showPDFViewer ? 'scale-100' : 'scale-95'}`}>
-                    <PDFViewer
-                        onClose={() => setShowPDFViewer(false)}
-                        onAddToCanvas={(text, pageNum) => {
-                            const newBoardId = `board-${Date.now()}`;
-                            const newBoard: CanvasElement = {
-                                id: newBoardId,
-                                type: 'container',
-                                x: (elements.length + 1) * 50, // Stagger position
-                                y: (elements.length + 1) * 50,
-                                w: 600,
-                                h: 800,
-                                color: '#ffffff',
-                                zIndex: 0,
-                                name: `PDF Page ${pageNum}`,
-                                content: 'board',
-                                locked: false,
-                                boardConfig: {
-                                    backgroundColor: '#ffffff',
-                                    gridCols: 12,
-                                    gridRows: 12,
-                                    showGrid: true,
-                                    showGuides: DEFAULT_CANVAS_CONFIG.showGuides,
-                                    bleed: DEFAULT_CANVAS_CONFIG.bleed,
-                                }
-                            };
-
-                            const textId = `text-${Date.now()}`;
-                            const textElement: CanvasElement = {
-                                id: textId,
-                                type: 'text',
-                                x: 50, // Relative to board
-                                y: 50,
-                                w: 500,
-                                h: 700,
-                                color: '#000000',
-                                zIndex: 1,
-                                name: `Page ${pageNum} Text`,
-                                content: text,
-                                textStyle: {
-                                    fontSize: 14,
-                                    fontFamily: 'Inter',
-                                    textAlign: 'left',
-                                    lineHeight: 1.5
-                                }
-                            };
-
-                            // In the current simple model, elements are flat. 
-                            // To simulate hierarchy, we place the text "on top" of the board visually
-                            // Ideally, we'd have a parentId, but for now we just add both.
-                            // If we want true containment, we'd need to update the data model.
-                            // For now, let's place the board and the text at the board's position + offset.
-
-                            const boardX = elements.length > 0 ? Math.max(...elements.map(e => e.x + e.w)) + 100 : 100;
-                            const boardY = 100;
-
-                            newBoard.x = boardX;
-                            newBoard.y = boardY;
-
-                            textElement.x = boardX + 40;
-                            textElement.y = boardY + 40;
-
-                            setElements(prev => [...prev, newBoard, textElement]);
-                            setShowPDFViewer(false);
-
-                            // Focus on new board center (properly centered in viewport)
-                            const centerX = boardX + newBoard.w / 2;
-                            const centerY = boardY + newBoard.h / 2;
-                            setViewPos(getCenteredViewPos(centerX, centerY));
-                        }}
-
-                        onAddAllToCanvas={(pagesData) => {
-                            let currentElements = [...elements];
-                            let startX = currentElements.length > 0
-                                ? Math.max(...currentElements.map(e => e.x + e.w)) + 100
-                                : 100;
-                            let startY = 100;
-
-                            const newElements: CanvasElement[] = [];
-
-                            pagesData.forEach((page, i) => {
-                                const boardX = startX + (i * 700); // 600 width + 100 margin
-                                const boardY = startY;
-
-                                const boardId = `board-${Date.now()}-${i}`;
-                                const board: CanvasElement = {
-                                    id: boardId,
-                                    type: 'container',
-                                    x: boardX,
-                                    y: boardY,
-                                    w: 600,
-                                    h: 800,
-                                    color: '#ffffff',
-                                    zIndex: 0,
-                                    name: `PDF Page ${page.pageNumber}`,
-                                    content: 'board',
-                                    locked: false,
-                                    boardConfig: {
-                                        backgroundColor: '#ffffff',
-                                        gridCols: 12,
-                                        gridRows: 12,
-                                        showGrid: true
-                                    }
-                                };
-
-                                const textId = `text-${Date.now()}-${i}`;
-                                const textElement: CanvasElement = {
-                                    id: textId,
-                                    type: 'text',
-                                    x: boardX + 40,
-                                    y: boardY + 40,
-                                    w: 500,
-                                    h: 700,
-                                    color: '#000000',
-                                    zIndex: 1,
-                                    name: `Page ${page.pageNumber} Text`,
-                                    content: page.text,
-                                    textStyle: {
-                                        fontSize: 14,
-                                        fontFamily: 'Inter',
-                                        textAlign: 'left',
-                                        lineHeight: 1.5
-                                    }
-                                };
-
-                                newElements.push(board, textElement);
-                            });
-
-                            setElements(prev => [...prev, ...newElements]);
-                            setShowPDFViewer(false);
-
-                            // View focus on the first new board center (properly centered in viewport)
-                            if (pagesData.length > 0) {
-                                const firstBoard = newElements[0];
-                                const centerX = firstBoard.x + firstBoard.w / 2;
-                                const centerY = firstBoard.y + firstBoard.h / 2;
-                                setViewPos(getCenteredViewPos(centerX, centerY));
-                            }
-                        }}
-                    />
-                </div>
-            </div>
-            {/* Mind Map Generator Modal */}
-            {isMindMapGeneratorOpen && (
-                <MindMapGenerator
-                    onClose={() => setIsMindMapGeneratorOpen(false)}
-                    onInsert={(mermaidCode) => {
-                        setIsMindMapGeneratorOpen(false);
-
-                        // Initial size (will be auto-adjusted by MindMapElement after render)
-                        const initialWidth = 400;
-                        const initialHeight = 300;
-
-                        // Determine target board bounds
-                        let boardX = 0;
-                        let boardY = 0;
-                        let boardW = logicalWidth;
-                        let boardH = logicalHeight;
-
-                        if (selectedBoardId !== 'primary' && activeBoard) {
-                            // Use the selected secondary board
-                            boardX = activeBoard.x;
-                            boardY = activeBoard.y;
-                            boardW = activeBoard.w;
-                            boardH = activeBoard.h;
-                        }
-
-                        // Calculate center of the target board
-                        const boardCenterX = boardX + boardW / 2;
-                        const boardCenterY = boardY + boardH / 2;
-
-                        // Position element at center of board
-                        let elementX = boardCenterX - initialWidth / 2;
-                        let elementY = boardCenterY - initialHeight / 2;
-
-                        // Ensure element stays within board bounds (with padding)
-                        const padding = 20;
-                        elementX = Math.max(boardX + padding, Math.min(elementX, boardX + boardW - initialWidth - padding));
-                        elementY = Math.max(boardY + padding, Math.min(elementY, boardY + boardH - initialHeight - padding));
-
-                        // Check for overlapping elements within the board
-                        const checkOverlap = (x: number, y: number, w: number, h: number) => {
-                            return elements.some(el => {
-                                if (el.type === 'container') return false; // Skip board containers
-                                const overlapX = x < el.x + el.w && x + w > el.x;
-                                const overlapY = y < el.y + el.h && y + h > el.y;
-                                return overlapX && overlapY;
-                            });
-                        };
-
-                        // Try to find non-overlapping position within board
-                        if (checkOverlap(elementX, elementY, initialWidth, initialHeight)) {
-                            const offsets = [
-                                { dx: 50, dy: 50 }, { dx: -50, dy: 50 },
-                                { dx: 50, dy: -50 }, { dx: -50, dy: -50 },
-                                { dx: 100, dy: 0 }, { dx: 0, dy: 100 },
-                                { dx: -100, dy: 0 }, { dx: 0, dy: -100 },
-                            ];
-
-                            for (const offset of offsets) {
-                                const testX = boardCenterX - initialWidth / 2 + offset.dx;
-                                const testY = boardCenterY - initialHeight / 2 + offset.dy;
-
-                                // Ensure still within board
-                                if (testX >= boardX + padding && testX + initialWidth <= boardX + boardW - padding &&
-                                    testY >= boardY + padding && testY + initialHeight <= boardY + boardH - padding) {
-                                    if (!checkOverlap(testX, testY, initialWidth, initialHeight)) {
-                                        elementX = testX;
-                                        elementY = testY;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-
-                        const newElement: CanvasElement = {
-                            id: crypto.randomUUID(),
-                            type: 'mindmap',
-                            name: 'Mind Map',
-                            x: Math.round(elementX),
-                            y: Math.round(elementY),
-                            w: initialWidth,
-                            h: initialHeight,
-                            zIndex: elements.length + 10,
-                            color: 'transparent',
-                            mermaidCode: mermaidCode,
-                        };
-
-                        setElements(prev => [...prev, newElement]);
-                        setSelectedIds([newElement.id]);
-                    }}
-                />
-            )}
-            {/* Animation Home Overlay */}
-            {isAnimationHomeOpen && (
-                <div className="fixed inset-0 z-[100] animate-in fade-in duration-300 overflow-y-auto overflow-x-hidden bg-black/90">
-                    <AnimationHome onClose={closeAnimationHome} />
-                </div>
-            )}
-            {/* P5.js Generator Modal */}
-            {isP5GeneratorOpen && (
-                <P5Generator
-                    onClose={() => setIsP5GeneratorOpen(false)}
-                    onInsert={(p5Data) => {
-                        setIsP5GeneratorOpen(false);
-
-                        // Initial size for p5.js preview
-                        const initialWidth = 500;
-                        const initialHeight = 400;
-
-                        // Determine target board bounds
-                        let boardX = 0;
-                        let boardY = 0;
-                        let boardW = logicalWidth;
-                        let boardH = logicalHeight;
-
-                        if (selectedBoardId !== 'primary' && activeBoard) {
-                            boardX = activeBoard.x;
-                            boardY = activeBoard.y;
-                            boardW = activeBoard.w;
-                            boardH = activeBoard.h;
-                        }
-
-                        // Calculate center of the target board
-                        const boardCenterX = boardX + boardW / 2;
-                        const boardCenterY = boardY + boardH / 2;
-
-                        // Position element at center of board
-                        let elementX = boardCenterX - initialWidth / 2;
-                        let elementY = boardCenterY - initialHeight / 2;
-
-                        // Ensure element stays within board bounds
-                        const padding = 20;
-                        elementX = Math.max(boardX + padding, Math.min(elementX, boardX + boardW - initialWidth - padding));
-                        elementY = Math.max(boardY + padding, Math.min(elementY, boardY + boardH - initialHeight - padding));
-
-                        const newElement: CanvasElement = {
-                            id: crypto.randomUUID(),
-                            type: 'p5',
-                            name: p5Data.topic || 'P5.js Animation',
-                            x: Math.round(elementX),
-                            y: Math.round(elementY),
-                            w: initialWidth,
-                            h: initialHeight,
-                            zIndex: elements.length + 10,
-                            color: '#1a1a1a',
-                            p5Data: p5Data,
-                        };
-
-                        setElements(prev => [...prev, newElement]);
-                        setSelectedIds([newElement.id]);
-                    }}
-                />
-            )}
         </div>
     );
 };

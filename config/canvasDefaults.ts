@@ -26,19 +26,54 @@ export const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
 const CANVAS_CONFIG_STORAGE_KEY = 'ai-layout-canvas-config';
 const CANVAS_CONFIG_STORAGE_VERSION = 1;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const finiteNumber = (value: unknown, fallback: number, minimum: number) =>
+  typeof value === 'number' && Number.isFinite(value) && value >= minimum ? value : fallback;
+
+const positiveInteger = (value: unknown, fallback: number) =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 1 ? value : fallback;
+
+const booleanValue = (value: unknown, fallback: boolean) =>
+  typeof value === 'boolean' ? value : fallback;
+
+const stringValue = (value: unknown, fallback: string) =>
+  typeof value === 'string' && value.trim() ? value : fallback;
+
+export const parseCanvasConfig = (value: unknown): CanvasConfig => {
+  if (!isRecord(value)) return { ...DEFAULT_CANVAS_CONFIG };
+
+  const isLegacy = value._v !== CANVAS_CONFIG_STORAGE_VERSION;
+  const mode = value.mode;
+
+  return {
+    width: finiteNumber(value.width, DEFAULT_CANVAS_CONFIG.width, Number.EPSILON),
+    height: finiteNumber(value.height, DEFAULT_CANVAS_CONFIG.height, Number.EPSILON),
+    mode: mode === 'page' || mode === 'slide' || mode === 'custom'
+      ? mode
+      : DEFAULT_CANVAS_CONFIG.mode,
+    presetName: stringValue(value.presetName, DEFAULT_CANVAS_CONFIG.presetName),
+    isFlipbook: booleanValue(value.isFlipbook, DEFAULT_CANVAS_CONFIG.isFlipbook),
+    borderRadius: finiteNumber(value.borderRadius, DEFAULT_CANVAS_CONFIG.borderRadius, 0),
+    backgroundColor: stringValue(value.backgroundColor, DEFAULT_CANVAS_CONFIG.backgroundColor),
+    bleed: isLegacy
+      ? DEFAULT_CANVAS_CONFIG.bleed
+      : finiteNumber(value.bleed, DEFAULT_CANVAS_CONFIG.bleed, 0),
+    showGuides: isLegacy
+      ? DEFAULT_CANVAS_CONFIG.showGuides
+      : booleanValue(value.showGuides, DEFAULT_CANVAS_CONFIG.showGuides),
+    gridRows: positiveInteger(value.gridRows, DEFAULT_CANVAS_CONFIG.gridRows),
+    gridCols: positiveInteger(value.gridCols, DEFAULT_CANVAS_CONFIG.gridCols),
+    showGrid: booleanValue(value.showGrid, DEFAULT_CANVAS_CONFIG.showGrid),
+  };
+};
+
 export const loadCanvasConfig = (): CanvasConfig => {
   try {
     const saved = localStorage.getItem(CANVAS_CONFIG_STORAGE_KEY);
     if (!saved) return { ...DEFAULT_CANVAS_CONFIG };
-    const parsed = JSON.parse(saved) as Partial<CanvasConfig> & { _v?: number };
-    const isLegacy = parsed._v !== CANVAS_CONFIG_STORAGE_VERSION;
-    const { _v: _version, ...stored } = parsed;
-    return {
-      ...DEFAULT_CANVAS_CONFIG,
-      ...stored,
-      bleed: isLegacy || stored.bleed === 0 ? DEFAULT_CANVAS_CONFIG.bleed : (stored.bleed ?? DEFAULT_CANVAS_CONFIG.bleed),
-      showGuides: isLegacy ? DEFAULT_CANVAS_CONFIG.showGuides : (stored.showGuides ?? DEFAULT_CANVAS_CONFIG.showGuides),
-    };
+    return parseCanvasConfig(JSON.parse(saved));
   } catch {
     return { ...DEFAULT_CANVAS_CONFIG };
   }
