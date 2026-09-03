@@ -235,6 +235,7 @@ Current Canvas Context:
                 selectedIds: [],
                 activeBoardId: null,
                 revision: currentRevision,
+                scale: 1,
                 uiLocked: false,
                 requireUiLock: false,
               },

@@ -377,6 +377,8 @@ export const DesignEditor = () => {
         setPages,
         setCurrentPage,
         setCanvasConfig,
+        scaleRef,
+        zoomCanvas: setScaleFromCenter,
         setElements,
         setSelectedIds,
         setIsUiLocked,

@@ -14,6 +14,7 @@ export type CanvasToolName =
   | 'set_ui_lock'
   | 'add_page'
   | 'configure_canvas'
+  | 'zoom_canvas'
   | 'search_internet_images'
   | 'add_board'
   | 'add_element'
@@ -260,6 +261,21 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
         gridRows: { type: 'integer', minimum: 1, maximum: 1000, description: 'Grid row count.' },
         gridCols: { type: 'integer', minimum: 1, maximum: 1000, description: 'Grid column count.' },
         showGrid: { type: 'boolean', description: 'Whether the canvas grid is visible.' },
+      },
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+  },
+  {
+    name: 'zoom_canvas',
+    title: 'Zoom the viewport',
+    description: 'Zooms the editing viewport in constant 0.1 scale steps, centered on the canvas. Does not change canvas content or revision. Lock the UI first.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['direction'],
+      properties: {
+        direction: { type: 'string', enum: ['in', 'out', 'reset'], description: 'Zoom in, zoom out, or reset to scale 1.' },
+        steps: { type: 'integer', minimum: 1, maximum: 10, description: 'Number of constant 0.1 steps. Defaults to 1. Ignored for reset.' },
       },
     },
     annotations: { readOnlyHint: false, untrustedContentHint: false },

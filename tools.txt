@@ -90,6 +90,13 @@ The lock has a visible human Unlock button and expires after five minutes. Read 
 - Does: locks or unlocks human editing while an agent works. It does not change the canvas revision.
 - Returns: lock state and the five-minute automatic recovery timeout.
 
+## `zoom_canvas`
+
+- Mode: UI write; requires UI lock
+- Input: `direction` (`in`, `out`, or `reset`) and optional `steps` (1–10, default 1).
+- Does: zooms the editing viewport in constant 0.1 scale steps around the canvas center (`in` clamps at 3, `out` at 0.2, `reset` returns to 1). It does not change canvas content, history, or revision. Human wheel/pinch zoom and pan remain available.
+- Returns: the new scale, the previous scale, and the applied direction.
+
 ## `add_page`
 
 - Mode: workspace write; requires UI lock

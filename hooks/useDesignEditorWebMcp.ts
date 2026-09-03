@@ -45,6 +45,8 @@ type UseDesignEditorWebMcpOptions = {
   setPages: SetCanvasPages;
   setCurrentPage: Dispatch<SetStateAction<number>>;
   setCanvasConfig: Dispatch<SetStateAction<CanvasConfig>>;
+  scaleRef: CurrentRef<number>;
+  zoomCanvas: (nextScale: number) => void;
   setElements: SetCanvasElements;
   setSelectedIds: Dispatch<SetStateAction<string[]>>;
   setIsUiLocked: Dispatch<SetStateAction<boolean>>;
@@ -67,6 +69,8 @@ export const useDesignEditorWebMcp = ({
   setPages,
   setCurrentPage,
   setCanvasConfig,
+  scaleRef,
+  zoomCanvas,
   setElements,
   setSelectedIds,
   setIsUiLocked,
@@ -172,6 +176,10 @@ export const useDesignEditorWebMcp = ({
       }));
     }
 
+    if (effects.zoomToScale !== undefined) {
+      zoomCanvas(effects.zoomToScale);
+    }
+
     if (removalTarget) {
       nextElements = nextElements.filter(element => element.id !== removalTarget.id);
       nextSelectedIds = nextSelectedIds.filter(id => id !== removalTarget.id);
@@ -252,6 +260,7 @@ export const useDesignEditorWebMcp = ({
     confirmationOpen,
     elementsRef,
     requestConfirmation,
+    scaleRef,
     selectedIdsRef,
     setCanvasConfig,
     setCurrentPage,
@@ -261,6 +270,7 @@ export const useDesignEditorWebMcp = ({
     setPages,
     setSelectedIds,
     uiLockedRef,
+    zoomCanvas,
   ]);
 
   applyOutcomeRef.current = applyCanvasToolOutcome;
@@ -279,6 +289,7 @@ export const useDesignEditorWebMcp = ({
         revision: canvasRevisionRef.current,
         uiLocked: uiLockedRef.current,
         requireUiLock: true,
+        scale: scaleRef.current,
       }),
       applyOutcome: (outcome: CanvasToolOutcome, signal: AbortSignal) => {
         const apply = applyOutcomeRef.current;

@@ -33,6 +33,7 @@ const contextWith = (
   revision: 1,
   uiLocked: false,
   requireUiLock: true,
+  scale: 1,
   ...overrides,
 });
 
@@ -159,4 +160,26 @@ test('reports off-board elements only for balance-oriented analysis', async () =
   assert.deepEqual(balance.data?.issues, ['Unassigned: Detached: Not inside any board']);
   assert.equal(overlaps.data?.issueCount, 0);
   assert.deepEqual(overlaps.data?.issues, []);
+});
+
+test('zooms the viewport in constant steps without touching canvas revision', async () => {
+  const locked = { uiLocked: true };
+
+  const unlocked = await executeCanvasTool('zoom_canvas', { direction: 'out' }, contextWith([]));
+  const zoomedOut = await executeCanvasTool('zoom_canvas', { direction: 'out', steps: 3 }, contextWith([], locked));
+  const zoomedIn = await executeCanvasTool('zoom_canvas', { direction: 'in' }, contextWith([], { ...locked, scale: 0.25 }));
+  const reset = await executeCanvasTool('zoom_canvas', { direction: 'reset' }, contextWith([], { ...locked, scale: 2.4 }));
+  const floored = await executeCanvasTool('zoom_canvas', { direction: 'out', steps: 10 }, contextWith([], { ...locked, scale: 0.25 }));
+  const noChange = await executeCanvasTool('zoom_canvas', { direction: 'in', steps: 1 }, contextWith([], { ...locked, scale: 3 }));
+  const badDirection = await executeCanvasTool('zoom_canvas', { direction: 'sideways' }, contextWith([], locked));
+
+  assert.equal(unlocked.error?.code, 'UI_NOT_LOCKED');
+  assert.deepEqual(zoomedOut.effects?.zoomToScale, 0.7);
+  assert.equal(zoomedOut.data?.previousScale, 1);
+  assert.deepEqual(zoomedIn.effects?.zoomToScale, 0.35);
+  assert.deepEqual(reset.effects?.zoomToScale, 1);
+  assert.deepEqual(floored.effects?.zoomToScale, 0.2);
+  assert.equal(noChange.effects?.zoomToScale, undefined);
+  assert.match(noChange.message || '', /already at scale 3/);
+  assert.equal(badDirection.error?.code, 'INVALID_INPUT');
 });

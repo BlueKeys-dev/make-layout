@@ -25,6 +25,7 @@ export interface CanvasToolExecutionContext {
   revision: number;
   uiLocked: boolean;
   requireUiLock: boolean;
+  scale: number;
 }
 
 export interface CanvasToolEffects {
@@ -39,6 +40,7 @@ export interface CanvasToolEffects {
   uiLocked?: boolean;
   pageToAdd?: { index: number };
   canvasConfigUpdates?: Partial<CanvasConfig>;
+  zoomToScale?: number;
   layoutElementsToAdd?: CanvasElement[];
   elementReplacement?: CanvasElement;
 }
@@ -517,6 +519,44 @@ export const executeCanvasTool = async (
         message: input.locked ? 'Human editing is locked for agent work.' : 'Human editing is unlocked.',
         data: { locked: input.locked, autoUnlockMinutes: input.locked ? 5 : null },
         effects: { uiLocked: input.locked },
+      };
+    }
+
+    if (tool === 'zoom_canvas') {
+      if (context.requireUiLock && !context.uiLocked) {
+        return fail(tool, 'UI_NOT_LOCKED', 'Lock human editing with set_ui_lock before changing the viewport.');
+      }
+      const rawDirection = text(input.direction, 'direction', 10);
+      if (!['in', 'out', 'reset'].includes(rawDirection)) {
+        return fail(tool, 'INVALID_INPUT', 'direction must be in, out, or reset.', 'direction');
+      }
+      const direction = rawDirection as 'in' | 'out' | 'reset';
+      const steps = input.steps === undefined ? 1 : integer(input.steps, 'steps', 1, 10);
+      const STEP = 0.1;
+      const previousScale = context.scale;
+      let next: number;
+      if (direction === 'reset') {
+        next = 1;
+      } else if (direction === 'in') {
+        next = Math.min(previousScale + STEP * steps, 3);
+      } else {
+        next = Math.max(previousScale - STEP * steps, 0.2);
+      }
+      next = Math.round(next * 100) / 100;
+      if (next === previousScale) {
+        return {
+          success: true,
+          tool,
+          message: `Viewport is already at scale ${previousScale}; no zoom applied.`,
+          data: { scale: previousScale, previousScale, direction, steps },
+        };
+      }
+      return {
+        success: true,
+        tool,
+        message: `Zoomed ${direction} to scale ${next}.`,
+        data: { scale: next, previousScale, direction, steps },
+        effects: { zoomToScale: next },
       };
     }
 
