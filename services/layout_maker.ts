@@ -6,11 +6,13 @@ import { DiagramType, DIAGRAM_CONFIGS } from '../types/diagramTypes';
 import { generateMindMapCode, generateDiagramsBatch, BatchDiagramRequest } from './mindMapService';
 import { RegisteredImage, formatImageRegistryForAI, resolveImageReferences } from './imageService';
 
-// Validate API key at module load - fail fast if missing
-if (!process.env.API_KEY) {
-  console.error('[LayoutMaker] CRITICAL: Missing API_KEY environment variable.');
-}
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+// Validate API key at module load - fail fast if missing. Browser builds have no `process`; AI calls are future work.
+const LAYOUT_API_KEY = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+const ai = LAYOUT_API_KEY ? new GoogleGenAI({ apiKey: LAYOUT_API_KEY }) : null;
+const getClient = (): GoogleGenAI => {
+  if (!ai) throw new Error('AI layout generation is not configured in this deployment.');
+  return ai;
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONSTANTS - Centralized configuration for maintainability
@@ -382,7 +384,7 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
   // Use Gemini 3 Flash for layout generation with error handling
   let response;
   try {
-    response = await ai.models.generateContent({
+    response = await getClient().models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: { parts: contentParts },
       config: {
@@ -839,7 +841,7 @@ export const chatWithLayoutAI = async (
     parts: [{ text: msg.content }],
   }));
 
-  const response = await ai.models.generateContent({
+  const response = await getClient().models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: contents,
     config: {

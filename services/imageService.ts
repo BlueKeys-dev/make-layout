@@ -56,11 +56,11 @@ export const createRegisteredImage = (
 // Format registry for AI context
 export const formatImageRegistryForAI = (images: RegisteredImage[]): string => {
   if (images.length === 0) return '';
-  
-  const imageList = images.map(img => 
+
+  const imageList = images.map(img =>
     `  - ${img.registryId}: "${img.description || img.keywords.join(', ') || 'User image'}" (${img.width || '?'}x${img.height || '?'})`
   ).join('\n');
-  
+
   return `\n\nAvailable User Images (use these IDs in "src" field for image elements):\n${imageList}`;
 };
 
@@ -86,7 +86,7 @@ export const resolveImageReferences = (
 };
 
 export const searchImages = async (query: string, signal?: AbortSignal): Promise<ImageSearchResult[]> => {
-  const ACCESS_KEY = process.env.UNSPLASH_ACCESS_KEY;
+  const ACCESS_KEY = typeof process !== 'undefined' ? process.env.UNSPLASH_ACCESS_KEY : undefined;
 
   if (!ACCESS_KEY) {
     console.error("Missing UNSPLASH_ACCESS_KEY");

@@ -1,8 +1,14 @@
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = typeof process !== 'undefined' && process.env.API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.API_KEY })
+  : null;
+const getClient = (): GoogleGenAI => {
+  if (!ai) throw new Error('AI GeoGebra generation is not configured in this deployment.');
+  return ai;
+};
 
-const SYSTEM_INSTRUCTION = `You are an expert in GeoGebra scripting and mathematical visualization. 
+const SYSTEM_INSTRUCTION = `You are an expert in GeoGebra scripting and mathematical visualization.
 You create engaging, educational animations and interactive constructions using GeoGebra commands.
 Your goal is to make visualizations that are clear, beautiful, and demonstrate mathematical concepts effectively.
 Use proper GeoGebra command syntax that can be executed via ggbApplet.evalCommand().
@@ -32,7 +38,7 @@ export const generateGeoGebraCode = async (
   const prompt = `
     Create a GeoGebra construction for: "${userPrompt}"
     Target app type: ${appType}
-    
+
 Requirements:
 1. Return ONLY valid GeoGebra commands, one per line.
 2. Each command must work with ggbApplet.evalCommand().
@@ -63,7 +69,7 @@ CORRECT GeoGebra Commands (use ONLY these):
     try {
       console.log(`[GeoGebraService] Attempt ${attempt + 1}/${maxRetries}`);
 
-      const response = await ai.models.generateContent({
+      const response = await getClient().models.generateContent({
         model: modelName,
         contents: { parts: [{ text: prompt }] },
         config: {
@@ -85,7 +91,7 @@ CORRECT GeoGebra Commands (use ONLY these):
       if (candidate?.content?.parts) {
         const thoughtParts = candidate.content.parts
           .filter((p: any) => p.thought === true && p.text);
-        
+
         if (thoughtParts.length > 0) {
           console.log("\n==================== GEOGEBRA AI THOUGHTS ====================");
           thoughtParts.forEach((p: any) => {
@@ -112,7 +118,7 @@ CORRECT GeoGebra Commands (use ONLY these):
         .filter(line => line && !line.startsWith('//'));
 
       const finalCode = lines.join('\n');
-      
+
       console.log(`[GeoGebraService] Success on attempt ${attempt + 1}`);
       return finalCode;
 
@@ -145,15 +151,15 @@ export const validateGeoGebraCode = (code: string): { valid: boolean; errors: st
   // Basic syntax checks
   lines.forEach((line, index) => {
     const trimmed = line.trim();
-    
+
     // Skip comments
     if (trimmed.startsWith('//')) return;
-    
+
     // Check for common issues
     if (trimmed.includes('undefined')) {
       errors.push(`Line ${index + 1}: Contains 'undefined'`);
     }
-    
+
     // Check balanced parentheses
     const openParens = (trimmed.match(/\(/g) || []).length;
     const closeParens = (trimmed.match(/\)/g) || []).length;

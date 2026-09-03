@@ -1,7 +1,13 @@
 import { GoogleGenAI, Type, Schema, FunctionDeclaration } from "@google/genai";
 import { P5ModelProvider } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = typeof process !== 'undefined' && process.env.API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.API_KEY })
+  : null;
+const getClient = (): GoogleGenAI => {
+  if (!ai) throw new Error('AI p5.js generation is not configured in this deployment.');
+  return ai;
+};
 
 // ====================
 // System Instructions
@@ -83,7 +89,7 @@ function keyPressed() { }
     try {
       console.log(`[P5Service] Gemini attempt ${attempt + 1}/${maxRetries}`);
 
-      const response = await ai.models.generateContent({
+      const response = await getClient().models.generateContent({
         model: modelName,
         contents: { parts: [{ text: prompt }] },
         config: {
@@ -102,7 +108,7 @@ function keyPressed() { }
       if (candidate?.content?.parts) {
         const thoughtParts = candidate.content.parts
           .filter((p: any) => p.thought === true && p.text);
-        
+
         if (thoughtParts.length > 0) {
           console.log("\n==================== GEMINI THOUGHTS ====================");
           thoughtParts.forEach((p: any) => {
@@ -201,7 +207,7 @@ Requirements:
 
       const data = await response.json();
       const text = data.choices?.[0]?.message?.content;
-      
+
       if (!text) throw new Error("Empty response from OpenRouter");
 
       // Clean up markdown code blocks
@@ -247,7 +253,7 @@ export const generateP5Code = async (
   modelProvider: P5ModelProvider = 'gemini'
 ): Promise<string> => {
   console.log(`[P5Service] Generating with provider: ${modelProvider}`);
-  
+
   if (modelProvider === 'openrouter') {
     return generateWithOpenRouter(userPrompt);
   }
@@ -323,7 +329,7 @@ export const executeP5GeneratorTool = async (args: {
   try {
     const code = await generateP5Code(args.prompt, args.modelProvider || 'gemini');
     const validation = validateP5Code(code);
-    
+
     return {
       code,
       success: validation.valid,

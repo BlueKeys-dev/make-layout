@@ -1,6 +1,12 @@
 import { GoogleGenAI, ThinkingLevel } from "@google/genai";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = typeof process !== 'undefined' && process.env.API_KEY
+  ? new GoogleGenAI({ apiKey: process.env.API_KEY })
+  : null;
+const getClient = (): GoogleGenAI => {
+  if (!ai) throw new Error('AI infographic generation is not configured in this deployment.');
+  return ai;
+};
 
 const GEMINI_MODEL = 'gemini-3-flash-preview';
 
@@ -46,7 +52,7 @@ strictly monochromatic color palette. The background must use only black and whi
 7.  **No External JS**: Use CSS animations for interaction. Vanilla JS only if absolutely necessary for logic.
 
 donot create welcome pag and unessery. go deep dive to topic core. use table , charts , visuals , graphs,etc enchnace students learning.
-add animation in diagrams , visuals. 
+add animation in diagrams , visuals.
 
 **Output Requirements:**
 - Return ONLY the raw HTML code with embedded CSS.
@@ -76,7 +82,7 @@ Return ONLY valid HTML code.`;
       tools.push({ googleSearch: {} });
     }
 
-    const response = await ai.models.generateContent({
+    const response = await getClient().models.generateContent({
       model: GEMINI_MODEL,
       contents: { parts: [{ text: userMessage }] },
       config: {
@@ -129,7 +135,7 @@ export async function* generateInfographicStream(
 
   const finalSystemPrompt = customSystemPrompt || SYSTEM_INSTRUCTION;
   const parts: any[] = [];
-  
+
   for (const attachment of attachments) {
     if (attachment.type === 'image' && attachment.data) {
       parts.push({
@@ -142,14 +148,14 @@ export async function* generateInfographicStream(
       parts.push({ text: `[Attached ${attachment.type}: ${attachment.name || 'content'}]\n${attachment.data}\n` });
     }
   }
-  
+
   const userMessage = `Create a "${topic}" web page about: ${prompt}.
 Make it visually impressive and modern.
 Return ONLY valid HTML code.`;
   parts.push({ text: userMessage });
 
   const tools: any[] = [];
-  
+
   if (enableGoogleSearch) {
     tools.push({ googleSearch: {} });
   }
@@ -165,7 +171,7 @@ Return ONLY valid HTML code.`;
   }
 
   try {
-    const response = await ai.models.generateContentStream({
+    const response = await getClient().models.generateContentStream({
       model: GEMINI_MODEL,
       contents: { parts },
       config: {

@@ -1,15 +1,16 @@
 import { GoogleGenAI } from "@google/genai";
 import { DiagramType, DIAGRAM_CONFIGS } from "../types/diagramTypes";
 
-// Validate API key at module load
-const API_KEY = process.env.API_KEY;
-if (!API_KEY) {
-  console.error('[DiagramService] CRITICAL: Missing API_KEY environment variable.');
-}
-const ai = new GoogleGenAI({ apiKey: API_KEY || '' });
+// Validate API key at module load. Browser builds have no `process`; AI calls are future work.
+const API_KEY = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
+const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
+const getClient = (): GoogleGenAI => {
+  if (!ai) throw new Error('AI diagram generation is not configured in this deployment.');
+  return ai;
+};
 
-const BASE_SYSTEM_INSTRUCTION = `You are an expert educator and visual designer. You create premium, highly engaging diagrams using Mermaid.js. 
-Your goal is to make diagrams that look modern, professional, and visually rich. 
+const BASE_SYSTEM_INSTRUCTION = `You are an expert educator and visual designer. You create premium, highly engaging diagrams using Mermaid.js.
+Your goal is to make diagrams that look modern, professional, and visually rich.
 The diagrams should be logically structured, high-contrast, and optimized for both presentation and learning.`;
 
 // ══════════════════════════════════════════════════════════════
@@ -51,48 +52,48 @@ const sanitizePrompt = (prompt: string): string => {
 /** Clean markdown code blocks from AI output and sanitize mindmap syntax */
 const cleanMermaidResponse = (text: string): string => {
   let cleaned = text.trim();
-  
+
   // Remove various markdown code block formats
   if (cleaned.startsWith('```mermaid')) {
     cleaned = cleaned.replace(/^```mermaid\s*\n?/, '').replace(/\n?```\s*$/, '');
   } else if (cleaned.startsWith('```')) {
     cleaned = cleaned.replace(/^```\w*\s*\n?/, '').replace(/\n?```\s*$/, '');
   }
-  
+
   // Normalize all whitespace and line endings
   cleaned = cleaned
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(/\u00A0/g, ' ')  // Non-breaking space
     .replace(/\t/g, '  ');    // Tabs to spaces
-  
+
   // Check if this is a mindmap - other diagram types don't need this fix
   const isMindmap = cleaned.trim().toLowerCase().startsWith('mindmap');
   if (!isMindmap) {
     return cleaned.trim();
   }
-  
+
   // Parse and fix the mindmap line by line
   const lines = cleaned.split('\n');
   const resultLines: string[] = [];
-  
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmed = line.trim();
-    
+
     // Check if this line contains a root definition with content after it
     // Pattern: root((something)):::classname followed by more content
     const rootWithClassMatch = trimmed.match(/^(root\(\([^)]*\)\)):::([\w-]+)\s+(.+)$/);
     if (rootWithClassMatch) {
       const [, rootPart, className, restContent] = rootWithClassMatch;
       resultLines.push(`  ${rootPart}:::${className}`);
-      
+
       // Smart split: try double spaces first, then single spaces
       let children = restContent.trim().split(/\s{2,}|\t/);
       if (children.length === 1 && children[0].includes(' ')) {
         children = children[0].split(/\s+/).filter(w => w.trim());
       }
-      
+
       for (const child of children) {
         const cleanChild = child.trim();
         if (cleanChild && !cleanChild.startsWith('classDef') && cleanChild.length > 0) {
@@ -101,18 +102,18 @@ const cleanMermaidResponse = (text: string): string => {
       }
       continue;
     }
-    
+
     // Pattern: root((something)) followed by content (no class)
     const rootNoClassMatch = trimmed.match(/^(root\(\([^)]*\)\))\s+(.+)$/);
     if (rootNoClassMatch) {
       const [, rootPart, restContent] = rootNoClassMatch;
       resultLines.push(`  ${rootPart}`);
-      
+
       let children = restContent.trim().split(/\s{2,}|\t/);
       if (children.length === 1 && children[0].includes(' ')) {
         children = children[0].split(/\s+/).filter(w => w.trim());
       }
-      
+
       for (const child of children) {
         const cleanChild = child.trim();
         if (cleanChild && !cleanChild.startsWith('classDef') && cleanChild.length > 0) {
@@ -121,7 +122,7 @@ const cleanMermaidResponse = (text: string): string => {
       }
       continue;
     }
-    
+
     // For normal lines, ensure proper indentation
     if (trimmed.toLowerCase() === 'mindmap') {
       resultLines.push('mindmap');
@@ -144,14 +145,14 @@ const cleanMermaidResponse = (text: string): string => {
       resultLines.push('');
     }
   }
-  
+
   return resultLines.join('\n').trim();
 };
 
 /** Validate if the generated code is valid Mermaid syntax (basic check) */
 const validateMermaidSyntax = (code: string, type: DiagramType): boolean => {
   if (!code || code.length < 10) return false;
-  
+
   // Check if it starts with expected keywords
   const typeKeywords: Record<string, string[]> = {
     mindmap: ['mindmap'],
@@ -162,7 +163,7 @@ const validateMermaidSyntax = (code: string, type: DiagramType): boolean => {
     pie: ['pie'],
     requirementDiagram: ['requirementdiagram'],
   };
-  
+
   const keywords = typeKeywords[type] || [];
   const codeLower = code.toLowerCase();
   return keywords.length === 0 || keywords.some(kw => codeLower.startsWith(kw));
@@ -218,12 +219,12 @@ export const generateMindMapCode = async (
       // Handle Auto Mode - detect best diagram type
       if (diagramType === 'auto' && attempt === 0) {
         try {
-          const autoResponse = await ai.models.generateContent({
+          const autoResponse = await getClient().models.generateContent({
             model: modelName,
             contents: { parts: [{ text: `${AUTO_DETECT_PROMPT}\n\nUser Prompt: "${sanitizedPrompt}"` }] },
             config: { responseMimeType: "application/json", abortSignal: signal }
           });
-          
+
           const result = JSON.parse(autoResponse.text || '{}');
           if (result.type && DIAGRAM_CONFIGS[result.type as keyof typeof DIAGRAM_CONFIGS]) {
             targetType = result.type as DiagramType;
@@ -239,14 +240,14 @@ export const generateMindMapCode = async (
       if (!config) {
         throw new Error(`Unknown diagram type: ${targetType}`);
       }
-      
+
       const prompt = `Create a diagram for: "${sanitizedPrompt}"
 
 ${config.systemPrompt}
 
 IMPORTANT: Return ONLY the raw Mermaid code. No explanations, no markdown, no backticks.`;
 
-      const response = await ai.models.generateContent({
+      const response = await getClient().models.generateContent({
         model: modelName,
         contents: { parts: [{ text: prompt }] },
         config: {
@@ -260,13 +261,13 @@ IMPORTANT: Return ONLY the raw Mermaid code. No explanations, no markdown, no ba
       if (!text) throw new Error("Empty response from AI");
 
       const cleanedCode = cleanMermaidResponse(text);
-      
+
       // Validate the output
       if (!validateMermaidSyntax(cleanedCode, targetType)) {
         console.warn(`[DiagramService] Validation warning: Code may not match expected ${targetType} syntax`);
         // Don't fail, mermaid.render will catch actual syntax errors
       }
-      
+
       console.log(`[DiagramService] Success on attempt ${attempt + 1}, type: ${targetType}`);
       return { code: cleanedCode, type: targetType };
 
@@ -291,7 +292,7 @@ IMPORTANT: Return ONLY the raw Mermaid code. No explanations, no markdown, no ba
   const errorMessage = isRateLimitError(lastError)
     ? 'Rate limit exceeded. Please wait a moment and try again.'
     : lastError?.message || 'Failed to generate diagram. Please try again.';
-  
+
   console.error("[DiagramService] All retries exhausted:", lastError);
   throw new Error(errorMessage);
 };
@@ -323,14 +324,14 @@ export const generateDiagramsBatch = async (
   signal?: AbortSignal,
 ): Promise<BatchDiagramResult[]> => {
   if (!requests.length) return [];
-  
+
   const results: BatchDiagramResult[] = [];
-  
+
   // Process in batches to respect rate limits
   for (let i = 0; i < requests.length; i += concurrencyLimit) {
     signal?.throwIfAborted();
     const batch = requests.slice(i, i + concurrencyLimit);
-    
+
     const batchPromises = batch.map(async (req): Promise<BatchDiagramResult> => {
       try {
         const result = await generateMindMapCode(req.prompt, req.type, 2, signal); // Fewer retries for batch
@@ -339,20 +340,20 @@ export const generateDiagramsBatch = async (
         if (error?.name === 'AbortError') throw error;
         console.warn(`[DiagramService] Batch item ${req.id} failed:`, error.message);
         // Return fallback on error
-        const fallback = DIAGRAM_CONFIGS[req.type as keyof typeof DIAGRAM_CONFIGS]?.defaultCode || 
+        const fallback = DIAGRAM_CONFIGS[req.type as keyof typeof DIAGRAM_CONFIGS]?.defaultCode ||
           `mindmap\n  root((${req.prompt.substring(0, 20)}))\n    Subtopic 1`;
         return { id: req.id, code: fallback, type: 'mindmap', error: error.message };
       }
     });
-    
+
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults);
-    
+
     // Small delay between batches to avoid rate limits
     if (i + concurrencyLimit < requests.length) {
       await delay(500, signal);
     }
   }
-  
+
   return results;
 };
