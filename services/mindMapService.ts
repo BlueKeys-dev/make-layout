@@ -1,13 +1,7 @@
-import { GoogleGenAI } from "@google/genai";
 import { DiagramType, DIAGRAM_CONFIGS } from "../types/diagramTypes";
+import { requestGemini, logGenerationFailure } from "./aiClient";
 
-// Validate API key at module load. Browser builds have no `process`; AI calls are future work.
-const API_KEY = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
-const ai = API_KEY ? new GoogleGenAI({ apiKey: API_KEY }) : null;
-const getClient = (): GoogleGenAI => {
-  if (!ai) throw new Error('AI diagram generation is not configured in this deployment.');
-  return ai;
-};
+// Diagram generation goes through the /api/gemini serverless route, which owns the Gemini key.
 
 const BASE_SYSTEM_INSTRUCTION = `You are an expert educator and visual designer. You create premium, highly engaging diagrams using Mermaid.js.
 Your goal is to make diagrams that look modern, professional, and visually rich.
@@ -211,9 +205,6 @@ export const generateMindMapCode = async (
   let targetType: DiagramType = diagramType === 'auto' ? 'mindmap' : diagramType;
   let lastError: any = null;
 
-  // Configuration errors are permanent: fail fast before any retry loop.
-  const client = getClient();
-
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       signal?.throwIfAborted();
@@ -222,10 +213,11 @@ export const generateMindMapCode = async (
       // Handle Auto Mode - detect best diagram type
       if (diagramType === 'auto' && attempt === 0) {
         try {
-          const autoResponse = await client.models.generateContent({
+          const autoResponse = await requestGemini({
             model: modelName,
             contents: { parts: [{ text: `${AUTO_DETECT_PROMPT}\n\nUser Prompt: "${sanitizedPrompt}"` }] },
-            config: { responseMimeType: "application/json", abortSignal: signal }
+            config: { responseMimeType: "application/json" },
+            signal,
           });
 
           const result = JSON.parse(autoResponse.text || '{}');
@@ -250,14 +242,14 @@ ${config.systemPrompt}
 
 IMPORTANT: Return ONLY the raw Mermaid code. No explanations, no markdown, no backticks.`;
 
-      const response = await getClient().models.generateContent({
+      const response = await requestGemini({
         model: modelName,
         contents: { parts: [{ text: prompt }] },
         config: {
           systemInstruction: BASE_SYSTEM_INSTRUCTION,
           responseMimeType: "text/plain",
-          abortSignal: signal,
         },
+        signal,
       });
 
       const text = response.text;
@@ -296,7 +288,7 @@ IMPORTANT: Return ONLY the raw Mermaid code. No explanations, no markdown, no ba
     ? 'Rate limit exceeded. Please wait a moment and try again.'
     : lastError?.message || 'Failed to generate diagram. Please try again.';
 
-  console.error("[DiagramService] All retries exhausted:", lastError);
+  logGenerationFailure("DiagramService", lastError);
   throw new Error(errorMessage);
 };
 

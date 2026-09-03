@@ -1,6 +1,6 @@
 // Chat AI Service with Function Calling for Layout Generation
 
-import { FunctionCallingConfigMode } from '@google/genai';
+
 import { CanvasElement, CanvasConfig, ChatMessage, LayoutPlan, AIModelId } from '../types';
 import { generateLayoutPlan } from './layout_maker';
 import { getModelConfig } from './aiProviders';
@@ -88,16 +88,16 @@ export const processChatMessage = async (
   imageContext?: string,
   signal?: AbortSignal
 ): Promise<ChatResponse> => {
-  
+
   // Extract Thought Signatures from history if present (stored in metadata usually, but here we might need to rely on the model managing it if we send full history of turns with function calls)
   // However, Gemini 3 requires strict return of thoughtSignature in tool use.
   // We need to verify if our ChatMessage type stores thoughtSignature.
   // If not, we should probably add it to the type definition, but for now we might lose context if we don't.
   // Given the scope, I will assume basic history passing. The SDK usually handles this if we use specialized chat methods, but we are using `generateContent` raw.
-  
+
   // Refactoring to use `generateContent` statelessly means we manually construct history.
   // Ideally we should use `startChat` for automatic history management, but existing code uses one-off calls.
-  
+
   const contents: any[] = conversationHistory.slice(-10).map(msg => {
      // NOTE: If we had stored thoughtSignature in msg, we would include it here.
      return {
@@ -110,8 +110,8 @@ export const processChatMessage = async (
 
   if (imageContext) {
     const { mediaResolution } = getModelConfig('gemini-3.5-flash-preview', true);
-    const mimeType = imageContext.startsWith('data:') 
-        ? imageContext.substring(5, imageContext.indexOf(';')) 
+    const mimeType = imageContext.startsWith('data:')
+        ? imageContext.substring(5, imageContext.indexOf(';'))
         : "image/png";
 
     parts.push({
@@ -163,20 +163,19 @@ Current Canvas Context:
   while (attempt < maxRetries) {
       try {
           if (signal?.aborted) throw new Error("Aborted");
-          
+
           const generatePromise = requestGemini({
             model: modelName,
             contents,
             config: {
               systemInstruction: `${CHAT_SYSTEM_PROMPT}\n\n${canvasContext}`,
-              abortSignal: signal,
               tools: [
                 { functionDeclarations: layoutFunctionDeclarations },
                 // Removed googleSearch to save quota as user has search_internet_images tool
               ],
               toolConfig: {
                 functionCallingConfig: {
-                  mode: FunctionCallingConfigMode.AUTO,
+                  mode: 'AUTO',
                 },
               },
               thinkingConfig: {
@@ -184,7 +183,8 @@ Current Canvas Context:
                 thinkingBudget: 24576,
               },
             },
-          }, signal);
+            signal,
+          });
 
           const response = await generatePromise;
 
@@ -220,7 +220,7 @@ Current Canvas Context:
           for (const part of resParts) {
         if (part.functionCall) {
             const { name, args } = part.functionCall;
-            
+
             console.log('🔧 [CHAT AI FUNCTION CALL]:', {
               functionName: name,
               args: args
@@ -264,7 +264,7 @@ Current Canvas Context:
 
         // Text check moved to after function call check to prioritize tools
       }
-      
+
       // Pass 2: Check for text if no tool was executed
       for (const part of resParts) {
         if (part.text) {
@@ -284,11 +284,11 @@ Current Canvas Context:
       if (error.message?.includes('429') || error.status === 429 || error.message?.includes('limit')) {
           attempt++;
           console.warn(`Gemini API Rate Limit hit. Retrying (${attempt}/${maxRetries})...`);
-          
+
           // Exponential backoff: 2s, 4s, 8s or use error details if available
           const match = error.message?.match(/retry in ([0-9.]+)s/);
           const waitTime = match ? parseFloat(match[1]) * 1000 : Math.pow(2, attempt) * 2000;
-          
+
           if (attempt < maxRetries) {
                await new Promise(resolve => setTimeout(resolve, waitTime + 500)); // Add 500ms buffer
                continue;

@@ -1,13 +1,8 @@
-import { GoogleGenAI, Type, Schema, FunctionDeclaration } from "@google/genai";
 import { P5ModelProvider } from "../types";
+import { requestGemini, logGenerationFailure } from "./aiClient";
 
-const ai = typeof process !== 'undefined' && process.env.API_KEY
-  ? new GoogleGenAI({ apiKey: process.env.API_KEY })
-  : null;
-const getClient = (): GoogleGenAI => {
-  if (!ai) throw new Error('AI p5.js generation is not configured in this deployment.');
-  return ai;
-};
+// p5.js generation goes through the /api/gemini serverless route, which owns the Gemini key.
+// Unconfigured deployments fail with a clear error at call time.
 
 // ====================
 // System Instructions
@@ -85,20 +80,16 @@ function keyPressed() { }
 
   let lastError: any = null;
 
-  // Configuration errors are permanent: fail fast before any retry loop.
-  const client = getClient();
-
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       console.log(`[P5Service] Gemini attempt ${attempt + 1}/${maxRetries}`);
 
-      const response = await client.models.generateContent({
+      const response = await requestGemini({
         model: modelName,
         contents: { parts: [{ text: prompt }] },
         config: {
           systemInstruction: SYSTEM_INSTRUCTION,
           responseMimeType: "text/plain",
-          // @ts-ignore
           thinkingConfig: {
             includeThoughts: true,
             thinkingLevel: "medium" as any
@@ -151,7 +142,7 @@ function keyPressed() { }
     }
   }
 
-  console.error("[P5Service] Gemini retries exhausted:", lastError);
+  logGenerationFailure("P5Service", lastError);
   throw lastError;
 };
 
@@ -240,7 +231,7 @@ Requirements:
     }
   }
 
-  console.error("[P5Service] OpenRouter retries exhausted:", lastError);
+  console.error("[P5Service] OpenRouter retries exhausted:", lastError?.message || lastError);
   throw lastError;
 };
 
@@ -294,32 +285,6 @@ export const validateP5Code = (code: string): { valid: boolean; errors: string[]
   }
 
   return { valid: errors.length === 0, errors };
-};
-
-/**
- * Tool calling interface for other AI to request p5.js generation
- * Returns a function declaration compatible with Gemini/OpenAI tool calling
- */
-export const getP5GeneratorTool = (): FunctionDeclaration => {
-  return {
-    name: "generate_p5_animation",
-    description: "Generate an interactive p5.js animation for educational purposes. Creates engaging visualizations for physics, math, computer science concepts.",
-    parameters: {
-      type: Type.OBJECT,
-      properties: {
-        prompt: {
-          type: Type.STRING,
-          description: "Description of the animation to create (e.g., 'bouncing ball simulation', 'sine wave visualization', 'sorting algorithm animation')"
-        },
-        modelProvider: {
-          type: Type.STRING,
-          description: "AI model to use for generation: 'gemini' for Gemini 3 Flash, 'openrouter' for OpenAI via OpenRouter",
-          enum: ["gemini", "openrouter"]
-        }
-      },
-      required: ["prompt"]
-    }
-  };
 };
 
 /**

@@ -141,7 +141,7 @@ export const MindMapGenerator: React.FC<MindMapGeneratorProps> = ({ onClose, onI
       setTimeout(() => forceRender(result.code), 50);
     } catch (e: any) {
       if (e.name !== 'AbortError') {
-        setError('Failed to generate diagram. Please try again.');
+        setError(e.message || 'Failed to generate diagram. Please try again.');
       }
     } finally {
       setIsGenerating(false);

@@ -1,18 +1,14 @@
 //layout maker - Gemini Flash Layout AI Service
 
-import { GoogleGenAI, Type, Schema } from '@google/genai';
+
 import { CanvasElement, CanvasConfig, LayoutPlan, LayoutPlanElement, ElementType, ShapeType } from '../types';
 import { DiagramType, DIAGRAM_CONFIGS } from '../types/diagramTypes';
 import { generateMindMapCode, generateDiagramsBatch, BatchDiagramRequest } from './mindMapService';
 import { RegisteredImage, formatImageRegistryForAI, resolveImageReferences } from './imageService';
+import { requestGemini } from './aiClient';
 
-// Validate API key at module load - fail fast if missing. Browser builds have no `process`; AI calls are future work.
-const LAYOUT_API_KEY = typeof process !== 'undefined' ? process.env.API_KEY : undefined;
-const ai = LAYOUT_API_KEY ? new GoogleGenAI({ apiKey: LAYOUT_API_KEY }) : null;
-const getClient = (): GoogleGenAI => {
-  if (!ai) throw new Error('AI layout generation is not configured in this deployment.');
-  return ai;
-};
+// Layout generation goes through the /api/gemini serverless route, which owns the Gemini key.
+// Unconfigured deployments fail with a clear error at call time.
 
 // ═══════════════════════════════════════════════════════════════════════════
 // CONSTANTS - Centralized configuration for maintainability
@@ -193,55 +189,55 @@ const normalizeTableData = (td: AILayoutElement['tableData']): {
 };
 
  // Layout response schema - simplified for reliability
-const layoutResponseSchema: Schema = {
-  type: Type.OBJECT,
+const layoutResponseSchema = {
+  type: 'OBJECT',
   properties: {
-    layoutStrategy: { type: Type.STRING },
+    layoutStrategy: { type: 'STRING' },
     elements: {
-      type: Type.ARRAY,
+      type: 'ARRAY',
       items: {
-        type: Type.OBJECT,
+        type: 'OBJECT',
         properties: {
-          id: { type: Type.STRING },
-          type: { type: Type.STRING, enum: ["text", "image", "shape", "mindmap", "flowchart", "sequenceDiagram", "classDiagram", "erDiagram", "pie", "requirementDiagram", "container", "table", "math"] },
-          name: { type: Type.STRING },
+          id: { type: 'STRING' },
+          type: { type: 'STRING', enum: ["text", "image", "shape", "mindmap", "flowchart", "sequenceDiagram", "classDiagram", "erDiagram", "pie", "requirementDiagram", "container", "table", "math"] },
+          name: { type: 'STRING' },
           // Fix: Added description to schema
-          description: { type: Type.STRING },
+          description: { type: 'STRING' },
           bounds: {
-            type: Type.OBJECT,
-            properties: { x: { type: Type.NUMBER }, y: { type: Type.NUMBER }, width: { type: Type.NUMBER }, height: { type: Type.NUMBER } },
+            type: 'OBJECT',
+            properties: { x: { type: 'NUMBER' }, y: { type: 'NUMBER' }, width: { type: 'NUMBER' }, height: { type: 'NUMBER' } },
             required: ["x", "y", "width", "height"],
           },
-          content: { type: Type.STRING },
-          src: { type: Type.STRING },
-          mermaidCode: { type: Type.STRING },
-          boardConfig: { type: Type.OBJECT, properties: { bgColor: { type: Type.STRING }, BR: { type: Type.NUMBER } } },
+          content: { type: 'STRING' },
+          src: { type: 'STRING' },
+          mermaidCode: { type: 'STRING' },
+          boardConfig: { type: 'OBJECT', properties: { bgColor: { type: 'STRING' }, BR: { type: 'NUMBER' } } },
           textStyle: {
-            type: Type.OBJECT,
+            type: 'OBJECT',
             properties: {
-              fontSize: { type: Type.NUMBER },
-              fontWeight: { type: Type.STRING, enum: ["normal", "bold", "semibold"] },
-              textAlign: { type: Type.STRING, enum: ["left", "center", "right"] },
-              lineHeight: { type: Type.NUMBER },
-              color: { type: Type.STRING },
+              fontSize: { type: 'NUMBER' },
+              fontWeight: { type: 'STRING', enum: ["normal", "bold", "semibold"] },
+              textAlign: { type: 'STRING', enum: ["left", "center", "right"] },
+              lineHeight: { type: 'NUMBER' },
+              color: { type: 'STRING' },
             }
           },
-          shapeType: { type: Type.STRING },
-          shapeColor: { type: Type.STRING },
+          shapeType: { type: 'STRING' },
+          shapeColor: { type: 'STRING' },
           tableData: {
-            type: Type.OBJECT,
+            type: 'OBJECT',
             properties: {
-              headers: { type: Type.ARRAY, items: { type: Type.STRING } },
-              data: { type: Type.ARRAY, items: { type: Type.ARRAY, items: { type: Type.STRING } } },
+              headers: { type: 'ARRAY', items: { type: 'STRING' } },
+              data: { type: 'ARRAY', items: { type: 'ARRAY', items: { type: 'STRING' } } },
             },
             required: ["headers", "data"],
           },
-          isBoard: { type: Type.BOOLEAN },
+          isBoard: { type: 'BOOLEAN' },
         },
         required: ["id", "type", "bounds"],
       },
     },
-    reasoning: { type: Type.STRING },
+    reasoning: { type: 'STRING' },
   },
   required: ["layoutStrategy", "elements"],
 };
@@ -384,19 +380,19 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
   // Use Gemini 3 Flash for layout generation with error handling
   let response;
   try {
-    response = await getClient().models.generateContent({
+    response = await requestGemini({
       model: 'gemini-3-flash-preview',
       contents: { parts: contentParts },
       config: {
         responseMimeType: 'application/json',
         responseSchema: layoutResponseSchema,
         systemInstruction: LAYOUT_SYSTEM_PROMPT,
-        abortSignal: signal,
         thinkingConfig: {
             includeThoughts: true,
             thinkingBudget: 46999,
         }
       },
+      signal,
     });
   } catch (error: any) {
     if (error?.name === 'AbortError') throw error;
@@ -841,7 +837,7 @@ export const chatWithLayoutAI = async (
     parts: [{ text: msg.content }],
   }));
 
-  const response = await getClient().models.generateContent({
+  const response = await requestGemini({
     model: 'gemini-3-flash-preview',
     contents: contents,
     config: {
@@ -851,12 +847,7 @@ export const chatWithLayoutAI = async (
     },
   });
 
-  // Fix #5: Handle response.text as property or method (SDK version compatibility)
-  const text = typeof response.text === 'function'
-    ? await (response.text as () => Promise<string>)()
-    : response.text;
-
-  return text || 'I understand. How would you like to proceed with the layout?';
+  return response.text || 'I understand. How would you like to proceed with the layout?';
 };
 
 export type LayoutValidationFocus = 'overlaps' | 'spacing' | 'balance' | 'readability' | 'all';

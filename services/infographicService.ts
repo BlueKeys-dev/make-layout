@@ -1,12 +1,7 @@
-import { GoogleGenAI, ThinkingLevel } from "@google/genai";
+import { requestGemini } from "./aiClient";
 
-const ai = typeof process !== 'undefined' && process.env.API_KEY
-  ? new GoogleGenAI({ apiKey: process.env.API_KEY })
-  : null;
-const getClient = (): GoogleGenAI => {
-  if (!ai) throw new Error('AI infographic generation is not configured in this deployment.');
-  return ai;
-};
+// Infographic generation goes through the /api/gemini serverless route, which owns the Gemini key.
+// Unconfigured deployments fail with a clear error at call time.
 
 const GEMINI_MODEL = 'gemini-3-flash-preview';
 
@@ -16,7 +11,7 @@ const GEMINI_MODEL = 'gemini-3-flash-preview';
  */
 const configBase = {
   thinkingConfig: {
-    thinkingLevel: ThinkingLevel.MEDIUM,
+    thinkingLevel: 'medium',
     includeThoughts: true,
   },
 };
@@ -82,7 +77,7 @@ Return ONLY valid HTML code.`;
       tools.push({ googleSearch: {} });
     }
 
-    const response = await getClient().models.generateContent({
+    const response = await requestGemini({
       model: GEMINI_MODEL,
       contents: { parts: [{ text: userMessage }] },
       config: {
@@ -171,7 +166,9 @@ Return ONLY valid HTML code.`;
   }
 
   try {
-    const response = await getClient().models.generateContentStream({
+    // Serverless proxy returns the complete response; yield it as one chunk so
+    // the streaming consumer interface is preserved.
+    const response = await requestGemini({
       model: GEMINI_MODEL,
       contents: { parts },
       config: {
@@ -182,11 +179,8 @@ Return ONLY valid HTML code.`;
       },
     });
 
-    for await (const chunk of response) {
-      const text = chunk.text;
-      if (text) {
-        yield text;
-      }
+    if (response.text) {
+      yield response.text;
     }
   } catch (error: any) {
     console.error("[InfographicService] Streaming failed:", error);

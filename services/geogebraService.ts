@@ -1,12 +1,7 @@
-import { GoogleGenAI } from "@google/genai";
+import { requestGemini, logGenerationFailure } from "./aiClient";
 
-const ai = typeof process !== 'undefined' && process.env.API_KEY
-  ? new GoogleGenAI({ apiKey: process.env.API_KEY })
-  : null;
-const getClient = (): GoogleGenAI => {
-  if (!ai) throw new Error('AI GeoGebra generation is not configured in this deployment.');
-  return ai;
-};
+// GeoGebra generation goes through the /api/gemini serverless route, which owns the Gemini key.
+// Unconfigured deployments fail with a clear error at call time.
 
 const SYSTEM_INSTRUCTION = `You are an expert in GeoGebra scripting and mathematical visualization.
 You create engaging, educational animations and interactive constructions using GeoGebra commands.
@@ -69,7 +64,7 @@ CORRECT GeoGebra Commands (use ONLY these):
     try {
       console.log(`[GeoGebraService] Attempt ${attempt + 1}/${maxRetries}`);
 
-      const response = await getClient().models.generateContent({
+      const response = await requestGemini({
         model: modelName,
         contents: { parts: [{ text: prompt }] },
         config: {
@@ -78,7 +73,6 @@ CORRECT GeoGebra Commands (use ONLY these):
           tools: [
             { googleSearch: {} }
           ],
-          // @ts-ignore
           thinkingConfig: {
             includeThoughts: true,
             thinkingBudget: -1,
@@ -139,7 +133,7 @@ CORRECT GeoGebra Commands (use ONLY these):
     }
   }
 
-  console.error("[GeoGebraService] All retries exhausted:", lastError);
+  logGenerationFailure("GeoGebraService", lastError);
   throw lastError;
 };
 
