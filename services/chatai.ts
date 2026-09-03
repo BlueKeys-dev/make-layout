@@ -107,7 +107,7 @@ export const processChatMessage = async (
   const parts: any[] = [{ text: userMessage }];
 
   if (imageContext) {
-    const { mediaResolution } = getModelConfig('gemini-3-flash-preview', true);
+    const { mediaResolution } = getModelConfig('gemini-3.5-flash-preview', true);
     const mimeType = imageContext.startsWith('data:') 
         ? imageContext.substring(5, imageContext.indexOf(';')) 
         : "image/png";

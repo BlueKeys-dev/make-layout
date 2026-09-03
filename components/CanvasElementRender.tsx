@@ -40,6 +40,7 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
   onMouseDown,
   onResizeStart,
   onUpdateElement,
+  scale = 1,
   canvasConfig
 }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -47,6 +48,10 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
   /* Removed unused text refs/funcs */
   // we keep fileInputRef for image
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [draftPoints, setDraftPoints] = useState<{ x: number, y: number }[] | null>(null);
+  const vertexDragCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => vertexDragCleanupRef.current?.(), []);
 
   // handleDoubleClick kept for potential future use or other modifications
   const handleDoubleClick = (e: React.MouseEvent) => {
@@ -197,7 +202,7 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
         // Check if it is a specific shape from our library
         if (element.type === 'shape' && element.shapeType && SHAPES[element.shapeType]) {
           const shapeDef = SHAPES[element.shapeType];
-          const rawPoints = (element.points as { x: number, y: number }[]) || shapeDef.createInitialPoints(element.w, element.h);
+          const rawPoints = draftPoints || (element.points as { x: number, y: number }[]) || shapeDef.createInitialPoints(element.w, element.h);
           const snapOn = element.snapToBox !== false;
           const points = snapOn ? fitPointsToBox(rawPoints, element.w, element.h) : rawPoints;
           const pathData = shapeDef.getPath(points, element.w, element.h);
@@ -238,23 +243,33 @@ export const CanvasElementRender: React.FC<CanvasElementRenderProps> = ({
                         const startX = e.clientX;
                         const startY = e.clientY;
                         const originalPt = { ...pt };
+                        let latestPoints = points;
+                        let moved = false;
+
+                        vertexDragCleanupRef.current?.();
 
                         const handleMove = (moveEvent: MouseEvent) => {
                           if (!onUpdateElement) return;
-                          const scale = 1; // Assuming scale 1 or we need to access context. 
-                          // Ideally pass scale prop to CanvasElementRender, but logic is simplified here.
-                          // The delta clientX is screen pixels.
                           const dx = (moveEvent.clientX - startX) / scale;
                           const dy = (moveEvent.clientY - startY) / scale;
 
                           const newPoints = [...points];
                           newPoints[i] = { x: originalPt.x + dx, y: originalPt.y + dy };
-                          onUpdateElement(element.id, { points: newPoints });
+                          latestPoints = newPoints;
+                          moved = moved || dx !== 0 || dy !== 0;
+                          setDraftPoints(newPoints);
                         };
 
                         const handleUp = () => {
+                          vertexDragCleanupRef.current?.();
+                          if (moved && onUpdateElement) onUpdateElement(element.id, { points: latestPoints });
+                          setDraftPoints(null);
+                        };
+
+                        vertexDragCleanupRef.current = () => {
                           document.removeEventListener('mousemove', handleMove);
                           document.removeEventListener('mouseup', handleUp);
+                          vertexDragCleanupRef.current = null;
                         };
 
                         document.addEventListener('mousemove', handleMove);

@@ -146,7 +146,7 @@ export const TableElement: React.FC<TableElementProps> = ({ element, onUpdateEle
     const renderCellContent = (content: string, isHeader: boolean = false) => {
         if (!content) return null;
 
-        const style = textColor ? { color: textColor } : undefined;
+        const style = { color: textColor || '#008855' };
 
         // Check if content looks like math
         if (isMathContent(content)) {

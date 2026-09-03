@@ -1,18 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// PDF.js worker for Node.js
-const pdfjsLib = require('pdfjs-dist/legacy/build/pdf.js');
+const MAX_PDF_BYTES = 3 * 1024 * 1024;
+const MAX_PDF_PAGES = 50;
+const MAX_IMAGE_PIXELS = 16_000_000;
+const MAX_IMAGES = 100;
+const LIMIT_ERROR = 'PDF exceeds processing limits (maximum 3 MiB and 50 pages).';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Set CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
-
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -27,14 +21,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Convert base64 to buffer
     const pdfBuffer = Buffer.from(pdfData, 'base64');
-    
+    if (pdfBuffer.byteLength > MAX_PDF_BYTES) {
+      return res.status(413).json({ error: LIMIT_ERROR });
+    }
+
     // Load PDF document
+    const pdfjsLib = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const loadingTask = pdfjsLib.getDocument({
       data: new Uint8Array(pdfBuffer),
       useSystemFonts: true,
     });
     
     const pdf = await loadingTask.promise;
+    if (pdf.numPages > MAX_PDF_PAGES) {
+      return res.status(413).json({ error: LIMIT_ERROR });
+    }
+
+    const { createCanvas } = await import('@napi-rs/canvas');
     const images: Array<{
       pageNumber: number;
       index: number;
@@ -50,8 +53,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const operators = await page.getOperatorList();
         
         let imageIndex = 0;
-        
+
         for (let i = 0; i < operators.fnArray.length; i++) {
+          if (images.length >= MAX_IMAGES) break;
+
           // OPS.paintImageXObject = 85
           if (operators.fnArray[i] === 85) {
             try {
@@ -74,8 +79,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
                 continue;
               }
 
+              const pixelCount = imageObj.width * imageObj.height;
+              if (!Number.isFinite(pixelCount) || pixelCount > MAX_IMAGE_PIXELS) {
+                continue;
+              }
+
               // Convert raw image data to base64 PNG using canvas
-              const { createCanvas } = await import('@napi-rs/canvas');
               const canvas = createCanvas(imageObj.width, imageObj.height);
               const ctx = canvas.getContext('2d');
               
@@ -131,17 +140,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
           }
         }
+
+        if (images.length >= MAX_IMAGES) break;
       } catch (pageErr) {
         console.warn(`Failed to process page ${pageNum}:`, pageErr);
       }
     }
 
     return res.status(200).json({ images, totalPages: pdf.numPages });
-  } catch (error: any) {
+  } catch (error) {
     console.error('PDF processing error:', error);
-    return res.status(500).json({ 
-      error: 'Failed to process PDF',
-      message: error.message 
-    });
+    return res.status(500).json({ error: 'Failed to process PDF' });
   }
 }

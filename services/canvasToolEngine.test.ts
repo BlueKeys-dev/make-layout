@@ -57,3 +57,18 @@ test('limits deterministic checks to the requested focus area', async () => {
   assert.equal(readability.data?.issueCount, 1);
   assert.deepEqual(readability.data?.issues, ['Main Board: Narrow text: Text container too narrow (100pt < 150pt)']);
 });
+
+test('reports off-board elements only for balance-oriented analysis', async () => {
+  const context = contextWith([
+    { id: 'unowned', type: 'shape', name: 'Detached', x: 900, y: 900, w: 100, h: 100, color: '#00f', zIndex: 1 },
+  ]);
+
+  const balance = await executeCanvasTool('analyze_current_layout', { focusArea: 'balance' }, context);
+  const overlaps = await executeCanvasTool('analyze_current_layout', { focusArea: 'overlaps' }, context);
+
+  assert.equal(balance.data?.isValid, false);
+  assert.equal(balance.data?.issueCount, 1);
+  assert.deepEqual(balance.data?.issues, ['Unassigned: Detached: Not inside any board']);
+  assert.equal(overlaps.data?.issueCount, 0);
+  assert.deepEqual(overlaps.data?.issues, []);
+});

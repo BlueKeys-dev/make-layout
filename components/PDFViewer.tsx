@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Upload, FileText, Image, Link2, Info, ChevronLeft, ChevronRight, Grid3X3, X, Loader2, Plus } from 'lucide-react';
 import {
   extractTextFromPDF,
@@ -12,6 +12,7 @@ import {
 import type { PDFText, PDFMetadata, PDFLink, PDFDocument, PDFImage } from '../types/pdf';
 
 type TabType = 'pages' | 'text' | 'images' | 'links' | 'metadata';
+type DeferredTabData = PDFText | PDFLink[] | PDFImage[];
 
 interface PDFViewerProps {
   onClose?: () => void;
@@ -33,18 +34,40 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({ onClose, onAddToCanvas, on
   const [metadata, setMetadata] = useState<PDFMetadata | null>(null);
   const [links, setLinks] = useState<PDFLink[]>([]);
   const [images, setImages] = useState<PDFImage[]>([]);
+  const [pdfProxy, setPdfProxy] = useState<any | null>(null);
   
   // Selected page for detailed view
   const [selectedPage, setSelectedPage] = useState<number | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadedTabsRef = useRef<Set<TabType>>(new Set());
+  const tabLoadsRef = useRef<Map<TabType, Promise<DeferredTabData>>>(new Map());
+  const fileLoadIdRef = useRef(0);
 
   const handleFileSelect = useCallback(async (file: File) => {
     if (file.type !== 'application/pdf') {
       alert('Please select a PDF file');
       return;
     }
+    if (file.size > 3 * 1024 * 1024) {
+      alert('PDF is too large. The maximum supported size is 3 MiB.');
+      return;
+    }
 
+    const loadId = fileLoadIdRef.current + 1;
+    fileLoadIdRef.current = loadId;
+    loadedTabsRef.current = new Set();
+    tabLoadsRef.current = new Map();
+    setPdfBuffer(null);
+    setPdfProxy(null);
+    setDocument(null);
+    setPageImages([]);
+    setText(null);
+    setMetadata(null);
+    setLinks([]);
+    setImages([]);
+    setSelectedPage(null);
+    setActiveTab('pages');
     setIsLoading(true);
     setFileName(file.name);
     
@@ -52,43 +75,73 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({ onClose, onAddToCanvas, on
       const buffer = await file.arrayBuffer();
       // Create a copy of the buffer for later use (original gets detached)
       const bufferCopy = buffer.slice(0);
-      setPdfBuffer(bufferCopy);
-      
+
       // Load PDF proxy once
       const pdfProxy = await loadPDFDocument(buffer);
-      
+      if (fileLoadIdRef.current !== loadId) return;
+      if (pdfProxy.numPages > 50) {
+        setFileName('');
+        alert('PDF has too many pages. The maximum supported is 50 pages.');
+        return;
+      }
+      setPdfBuffer(bufferCopy);
+      setPdfProxy(pdfProxy);
+
       // Extract document info
       const doc = await getPDFDocumentInfo(pdfProxy);
+      if (fileLoadIdRef.current !== loadId) return;
       setDocument(doc);
       setMetadata(doc.metadata);
+      loadedTabsRef.current.add('metadata');
       
       // Render all pages using the proxy
       const images = await renderAllPages(pdfProxy, 1.0, (current, total) => {
-        setLoadingProgress({ current, total });
+        if (fileLoadIdRef.current === loadId) setLoadingProgress({ current, total });
       });
+      if (fileLoadIdRef.current !== loadId) return;
       setPageImages(images);
-      
-      // Extract text using the proxy
-      const textData = await extractTextFromPDF(pdfProxy, false);
-      setText(textData);
-      
-      // Extract links using the proxy
-      const linksData = await extractLinks(pdfProxy);
-      setLinks(linksData);
-      
-      // Extract images using serverless API (use the copy since original is detached)
-      const imagesData = await extractImages(bufferCopy);
-      setImages(imagesData);
-      
+      loadedTabsRef.current.add('pages');
       setActiveTab('pages');
     } catch (error) {
       console.error('Error loading PDF:', error);
       alert('Error loading PDF file. Please try again.');
     } finally {
-      setIsLoading(false);
-      setLoadingProgress({ current: 0, total: 0 });
+      if (fileLoadIdRef.current === loadId) {
+        setIsLoading(false);
+        setLoadingProgress({ current: 0, total: 0 });
+      }
     }
   }, []);
+
+  useEffect(() => {
+    if (!pdfBuffer || !pdfProxy || loadedTabsRef.current.has(activeTab)) return;
+    if (activeTab !== 'text' && activeTab !== 'links' && activeTab !== 'images') return;
+
+    let cancelled = false;
+    let loadPromise = tabLoadsRef.current.get(activeTab);
+    if (!loadPromise) {
+      if (activeTab === 'text') loadPromise = extractTextFromPDF(pdfProxy, false);
+      else if (activeTab === 'links') loadPromise = extractLinks(pdfProxy);
+      else loadPromise = extractImages(pdfBuffer);
+      tabLoadsRef.current.set(activeTab, loadPromise);
+    }
+
+    void loadPromise.then((data) => {
+      if (cancelled) return;
+      if (activeTab === 'text') setText(data as PDFText);
+      else if (activeTab === 'links') setLinks(data as PDFLink[]);
+      else setImages(data as PDFImage[]);
+      loadedTabsRef.current.add(activeTab);
+    }).catch((error) => {
+      if (tabLoadsRef.current.get(activeTab) === loadPromise) {
+        tabLoadsRef.current.delete(activeTab);
+      }
+      if (!cancelled) console.error(`Failed to load PDF ${activeTab}:`, error);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, pdfBuffer, pdfProxy]);
 
   const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -106,7 +159,11 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({ onClose, onAddToCanvas, on
   }, [handleFileSelect]);
 
   const resetViewer = useCallback(() => {
+    fileLoadIdRef.current += 1;
+    loadedTabsRef.current = new Set();
+    tabLoadsRef.current = new Map();
     setPdfBuffer(null);
+    setPdfProxy(null);
     setFileName('');
     setDocument(null);
     setPageImages([]);
@@ -115,6 +172,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({ onClose, onAddToCanvas, on
     setLinks([]);
     setImages([]);
     setSelectedPage(null);
+    setActiveTab('pages');
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }

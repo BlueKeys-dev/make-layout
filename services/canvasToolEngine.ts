@@ -223,6 +223,7 @@ const getBoardState = (context: CanvasToolExecutionContext) => {
   } satisfies BoardSummary));
   const boards = [primary, ...secondary];
   const objectsByBoard = new Map(boards.map(board => [board.id, [] as CanvasElement[]]));
+  const unownedObjects: CanvasElement[] = [];
 
   for (const element of context.elements) {
     if (element.type === 'container') continue;
@@ -231,9 +232,10 @@ const getBoardState = (context: CanvasToolExecutionContext) => {
     const owner = [...secondary].reverse().find(board => containsPoint(board.bounds, centerX, centerY))
       || (containsPoint(primaryBounds, centerX, centerY) ? primary : undefined);
     if (owner) objectsByBoard.get(owner.id)?.push(element);
+    else unownedObjects.push(element);
   }
 
-  return { boards, objectsByBoard };
+  return { boards, objectsByBoard, unownedObjects };
 };
 
 const boundedPage = (base: Record<string, unknown>, items: Record<string, unknown>[], offset: number) => {
@@ -357,7 +359,7 @@ export const executeCanvasTool = async (
 
     if (tool === 'list_boards') {
       const { offset, limit } = readWindow(input);
-      const { boards, objectsByBoard } = getBoardState(context);
+      const { boards, objectsByBoard, unownedObjects } = getBoardState(context);
       const items = boards.slice(offset, offset + limit).map(board => ({
         ...board,
         objectCount: objectsByBoard.get(board.id)?.length || 0,
@@ -483,7 +485,7 @@ export const executeCanvasTool = async (
       if (tool === 'analyze_current_layout' && !['overlaps', 'spacing', 'balance', 'readability', 'all'].includes(focusArea)) {
         throw new Error('focusArea is not supported.');
       }
-      const { boards, objectsByBoard } = getBoardState(context);
+      const { boards, objectsByBoard, unownedObjects } = getBoardState(context);
       const boardAnalyses = boards.map(board => {
         const layoutElements = (objectsByBoard.get(board.id) || []).map(element => ({
           ...element,
@@ -499,7 +501,10 @@ export const executeCanvasTool = async (
         );
         return analysis.issues.map(issue => `${board.name}: ${issue}`);
       });
-      const allIssues = boardAnalyses.flat();
+      const unownedIssues = focusArea === 'balance' || focusArea === 'all'
+        ? unownedObjects.map(element => `Unassigned: ${element.name}: Not inside any board`)
+        : [];
+      const allIssues = [...boardAnalyses.flat(), ...unownedIssues];
       const issues = allIssues.slice(0, 5).map(issue => issue.slice(0, 140));
       if (tool === 'analyze_current_layout') {
         return {

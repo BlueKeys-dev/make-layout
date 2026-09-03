@@ -529,9 +529,26 @@ export const DesignEditor = () => {
                 shapeType: el.shapeType, // For shape elements
             }));
 
+            const plannedById = new Map(newElements.map(element => [element.id, element]));
+            const currentIds = new Set(elements.map(element => element.id));
+            const mergedElements = elements.map(element => {
+                const planned = plannedById.get(element.id);
+                if (!planned) return element;
+                return {
+                    ...element,
+                    x: planned.x,
+                    y: planned.y,
+                    w: planned.w,
+                    h: planned.h,
+                };
+            });
+            for (const planned of newElements) {
+                if (!currentIds.has(planned.id)) mergedElements.push(planned);
+            }
+
             if (controller.signal.aborted) return;
 
-            setElements(newElements);
+            setElements(mergedElements);
             addChatMessage('assistant', '✅ Layout has been applied to the canvas! You can now edit individual elements.');
             setPendingPlan(null);
         } catch (error) {

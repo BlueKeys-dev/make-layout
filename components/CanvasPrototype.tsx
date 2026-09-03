@@ -23,13 +23,16 @@ export const CanvasPrototype = () => {
   const LOGICAL_HEIGHT = 842;
 
   const { 
-    selectedId, 
-    setSelectedId, 
+    selectedIds,
+    setSelectedIds,
     handleMouseDown, 
     handleMouseMove, 
     handleMouseUp, 
     mode 
   } = useCanvasInteraction(elements, setElements, CANVAS_SCALE);
+
+  const selectedId = selectedIds[0] ?? null;
+  const setSelectedId = (id: string | null) => setSelectedIds(id ? [id] : []);
 
   const selectedElement = elements.find(e => e.id === selectedId);
 
@@ -80,7 +83,10 @@ export const CanvasPrototype = () => {
         borderRadius: 0,
         backgroundColor: '#ffffff',
         bleed: 0,
-        showGuides: showMargins
+        showGuides: showMargins,
+        gridRows: 12,
+        gridCols: 12,
+        showGrid,
       };
 
       const result = await generateLayout(elements, config);

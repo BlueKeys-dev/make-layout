@@ -53,6 +53,13 @@ Last updated: 2026-09-03
 - Editor pages persist in browser local storage from `components/DesignEditor.tsx`.
 - User layout templates persist separately through `services/layoutTemplates.ts`.
 - `utils/exportUtils.ts` exports PNG, PDF, PPTX, and project JSON; unassigned layout-slot guides are removed from visual exports.
+- `components/editor/EditorHeader.tsx` sanitizes imported project pages and routes exported version `1.0` canvas settings through `parseCanvasConfig` without treating them as legacy storage.
+
+## PDF import
+
+- `components/PDFViewer.tsx` loads document metadata and page previews, then reuses one in-flight extraction per text, links, or images tab.
+- `services/pdfService.ts` owns browser-side PDF loading, rendering, and the image-extraction API fallback.
+- `api/extract-images.ts` is the same-origin serverless image extractor and enforces PDF, page, pixel, and image-count limits.
 
 ## Focused tests
 
@@ -65,3 +72,4 @@ Last updated: 2026-09-03
 - Interactive element placement: start with `hooks/useCanvasPlacement.ts`.
 - Agent board/layout behavior: inspect `services/canvasToolCatalog.ts`, `services/canvasToolEngine.ts`, and `services/webmcp.ts`.
 - Element rendering failures: start with `components/CanvasElementRender.tsx`, then the type-specific renderer and `utils/contentSecurity.ts`.
+- PDF import failures: start with `components/PDFViewer.tsx`, then `services/pdfService.ts` and `api/extract-images.ts`.

@@ -1,12 +1,15 @@
-// To run this code you need to install the following dependencies:
-// npm install @google/genai mime
-// npm install -D @types/node
+// Uses the repository's existing @google/genai dependency.
 
 import {
   GoogleGenAI,
 } from '@google/genai';
-import mime from 'mime';
 import { writeFile } from 'fs';
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+};
 
 function saveBinaryFile(fileName: string, content: Buffer) {
   writeFile(fileName, content, 'utf8', (err) => {
@@ -68,7 +71,7 @@ async function main() {
     if (chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData) {
       const fileName = `ENTER_FILE_NAME_${fileIndex++}`;
       const inlineData = chunk.candidates[0].content.parts[0].inlineData;
-      const fileExtension = mime.getExtension(inlineData.mimeType || '');
+      const fileExtension = IMAGE_EXTENSIONS[inlineData.mimeType || ''] || 'bin';
       const buffer = Buffer.from(inlineData.data || '', 'base64');
       saveBinaryFile(`${fileName}.${fileExtension}`, buffer);
     }

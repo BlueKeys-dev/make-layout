@@ -24,7 +24,7 @@ export const DEFAULT_CANVAS_CONFIG: CanvasConfig = {
 };
 
 const CANVAS_CONFIG_STORAGE_KEY = 'ai-layout-canvas-config';
-const CANVAS_CONFIG_STORAGE_VERSION = 1;
+export const CANVAS_CONFIG_STORAGE_VERSION = 1;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

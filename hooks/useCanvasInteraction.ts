@@ -113,7 +113,7 @@ export const useCanvasInteraction = (
 
         if (handle.includes('w')) {
           newW = Math.max(10, original.w - deltaX);
-          newX = original.x + deltaX;
+          newX = original.x + original.w - newW;
           if (isImage) {
              const constrainedH = newW / ratio;
              // We need to adjust Y if it's a 'n' handle, but here we are in 'w' (could be 'nw' or 'sw')
@@ -128,7 +128,7 @@ export const useCanvasInteraction = (
         }
         if (handle.includes('n')) {
           newH = Math.max(10, original.h - deltaY);
-          newY = original.y + deltaY;
+          newY = original.y + original.h - newH;
         }
         if (handle.includes('s')) {
           newH = Math.max(10, original.h + deltaY);

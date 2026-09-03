@@ -29,6 +29,6 @@ for await (const chunk of stream) {
   
   // Usage information comes in the final chunk
   if (chunk.usage) {
-    console.log("\nReasoning tokens:", chunk.usage.reasoningTokens);
+    console.log("\nReasoning tokens:", chunk.usage.completionTokensDetails?.reasoningTokens ?? 0);
   }
 }

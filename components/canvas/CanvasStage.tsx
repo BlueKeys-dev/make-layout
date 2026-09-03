@@ -204,6 +204,7 @@ export const CanvasStage: React.FC<CanvasStageProps> = ({
             onUpdateElement={(id, ups) => {
               setElements(prev => prev.map(e => e.id === id ? { ...e, ...ups } : e));
             }}
+            scale={scale}
             canvasConfig={canvasConfig}
           />
         ))}

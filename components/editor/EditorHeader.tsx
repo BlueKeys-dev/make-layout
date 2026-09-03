@@ -2,6 +2,32 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Download, ImageIcon, FileText, Presentation, FileJson, Upload } from 'lucide-react';
 import { downloadAsPNG, downloadAsPDF, downloadAsPPTX, exportAsJSON } from '../../utils/exportUtils';
 import { CanvasConfig, CanvasElement } from '../../types';
+import { parseCanvasConfig, CANVAS_CONFIG_STORAGE_VERSION } from '../../config/canvasDefaults';
+
+const ELEMENT_TYPES = new Set([
+  'text', 'image', 'shape', 'path', 'table', 'mindmap', 'geogebra', 'figure', 'container', 'math', 'p5',
+]);
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const isUsableElement = (value: unknown): value is Record<string, unknown> => {
+  if (!isRecord(value)) return false;
+  return typeof value.id === 'string'
+    && value.id.trim().length > 0
+    && typeof value.type === 'string'
+    && ELEMENT_TYPES.has(value.type)
+    && typeof value.x === 'number'
+    && Number.isFinite(value.x)
+    && typeof value.y === 'number'
+    && Number.isFinite(value.y)
+    && typeof value.w === 'number'
+    && Number.isFinite(value.w)
+    && value.w > 0
+    && typeof value.h === 'number'
+    && Number.isFinite(value.h)
+    && value.h > 0;
+};
 
 interface EditorHeaderProps {
   canvasRef: React.RefObject<HTMLDivElement | null>;
@@ -65,14 +91,56 @@ export const EditorHeader: React.FC<EditorHeaderProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const data = JSON.parse(event.target?.result as string);
-        if (data.pages && Array.isArray(data.pages)) {
-          setPages(data.pages);
-          setCurrentPage(0);
+        const data: unknown = JSON.parse(event.target?.result as string);
+        if (!isRecord(data) || !Array.isArray(data.pages)) {
+          alert('Failed to import project. The file must contain a pages array.');
+          return;
         }
-        if (data.canvasConfig) {
-          setCanvasConfig(data.canvasConfig);
+
+        let droppedPages = 0;
+        let droppedElements = 0;
+        const sanitizedPages = data.pages.flatMap((page) => {
+          if (!Array.isArray(page)) {
+            droppedPages += 1;
+            return [];
+          }
+
+          const elements = page.flatMap((element, index) => {
+            if (!isUsableElement(element)) {
+              droppedElements += 1;
+              return [];
+            }
+            const type = element.type as CanvasElement['type'];
+            return [{
+              ...element,
+              id: (element.id as string).trim(),
+              type,
+              name: typeof element.name === 'string' && element.name.trim() ? element.name : `Untitled ${type}`,
+              color: typeof element.color === 'string' && element.color.trim()
+                ? element.color
+                : (type === 'mindmap' || type === 'container' ? 'transparent' : '#e2e8f0'),
+              zIndex: typeof element.zIndex === 'number' && Number.isFinite(element.zIndex) ? element.zIndex : index + 1,
+            } as CanvasElement];
+          });
+          return [elements];
+        });
+
+        if (sanitizedPages.length === 0) {
+          alert('Failed to import project. No usable pages were found.');
+          return;
         }
+
+        const canvasConfigToParse = data.version === '1.0' && isRecord(data.canvasConfig)
+          ? { ...data.canvasConfig, _v: CANVAS_CONFIG_STORAGE_VERSION }
+          : data.canvasConfig;
+        const sanitizedCanvasConfig = parseCanvasConfig(canvasConfigToParse);
+        if (droppedPages > 0 || droppedElements > 0) {
+          console.warn(`Project import dropped ${droppedPages} page(s) and ${droppedElements} element(s).`);
+        }
+
+        setPages(sanitizedPages);
+        setCanvasConfig(sanitizedCanvasConfig);
+        setCurrentPage(0);
         alert('Project imported successfully!');
       } catch (err) {
         console.error(err);
