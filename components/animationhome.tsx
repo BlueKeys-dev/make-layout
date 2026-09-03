@@ -896,7 +896,7 @@ export const AnimationHome: React.FC<{ onClose?: () => void }> = ({ onClose }) =
           {/* Header Badge - Industrial Style */}
           <div className={`hero-element flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2 sm:py-2.5 rounded-full glass-panel-soft hover:border-[${THEME.primary}]/30 transition-all cursor-default`}>
             <span className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full animate-pulse" style={{ backgroundColor: THEME.accent, boxShadow: `0 0 12px ${THEME.accent}` }} />
-            <span className="text-[8px] sm:text-[10px] font-semibold tracking-[0.2em] sm:tracking-[0.25em] uppercase font-['JetBrains_Mono']" style={{ color: THEME.text }}>needs api key</span>
+            <span className="text-[8px] sm:text-[10px] font-semibold tracking-[0.2em] sm:tracking-[0.25em] uppercase font-['JetBrains_Mono']" style={{ color: THEME.text }}>BETA</span>
           </div>
      
 
