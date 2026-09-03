@@ -1,48 +1,48 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { CanvasElement, CanvasConfig } from "../types";
 import { getEffectiveDimensions, getSafeZones } from "../config/canvasDefaults";
 import { getModelConfig } from "./aiProviders";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// The direct browser SDK client is intentionally disabled. Keep the API-backed
+// request here so static bundles never receive the Gemini credential.
+import { requestGemini } from './aiClient';
 
 // Define the response schema for the layout
-const layoutSchema: Schema = {
-  type: Type.OBJECT,
+const layoutSchema = {
+  type: 'object',
   properties: {
     elements: {
-      type: Type.ARRAY,
+      type: 'array',
       description: "List of all elements for the page layout.",
       items: {
-        type: Type.OBJECT,
+        type: 'object',
         properties: {
-          id: { type: Type.STRING },
-          type: { type: Type.STRING, enum: ["text", "image", "shape", "path"] },
-          name: { type: Type.STRING },
-          x: { type: Type.NUMBER },
-          y: { type: Type.NUMBER },
-          w: { type: Type.NUMBER },
-          h: { type: Type.NUMBER },
-          zIndex: { type: Type.INTEGER },
-          content: { type: Type.STRING },
+          id: { type: 'string' },
+          type: { type: 'string', enum: ['text', 'image', 'shape', 'path'] },
+          name: { type: 'string' },
+          x: { type: 'number' },
+          y: { type: 'number' },
+          w: { type: 'number' },
+          h: { type: 'number' },
+          zIndex: { type: 'integer' },
+          content: { type: 'string' },
           textStyle: {
-            type: Type.OBJECT,
+            type: 'object',
             properties: {
-              fontSize: { type: Type.NUMBER },
-              fontWeight: { type: Type.STRING },
-              fontStyle: { type: Type.STRING },
-              textAlign: { type: Type.STRING },
-              color: { type: Type.STRING },
-              lineHeight: { type: Type.NUMBER }
+              fontSize: { type: 'number' },
+              fontWeight: { type: 'string' },
+              fontStyle: { type: 'string' },
+              textAlign: { type: 'string' },
+              color: { type: 'string' },
+              lineHeight: { type: 'number' }
             }
           },
-          src: { type: Type.STRING },
-          color: { type: Type.STRING }
+          src: { type: 'string' },
+          color: { type: 'string' }
         },
         required: ["id", "type", "x", "y", "w", "h"],
       },
     },
     reasoning: {
-      type: Type.STRING,
+      type: 'string',
       description: "Brief explanation of the design choices made.",
     }
   },
@@ -117,7 +117,7 @@ export const generateLayout = async (
 
     parts.push({ text: fullSystemPrompt });
 
-    const response = await ai.models.generateContent({
+    const response = await requestGemini({
       model: modelName,
       contents: { parts },
       config: {

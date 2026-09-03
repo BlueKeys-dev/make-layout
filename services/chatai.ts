@@ -1,12 +1,14 @@
 // Chat AI Service with Function Calling for Layout Generation
 
-import { GoogleGenAI, FunctionCallingConfigMode } from '@google/genai';
+import { FunctionCallingConfigMode } from '@google/genai';
 import { CanvasElement, CanvasConfig, ChatMessage, LayoutPlan, AIModelId } from '../types';
 import { generateLayoutPlan } from './layout_maker';
 import { getModelConfig } from './aiProviders';
 import { CHAT_CANVAS_TOOLS, CanvasToolName, validateCanvasToolCatalog } from './canvasToolCatalog';
 import { executeCanvasTool } from './canvasToolEngine';
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Browser-side GoogleGenAI was intentionally removed. Keep provider credentials in
+// the server route and use this small transport client for static deployments.
+import { requestGemini } from './aiClient';
 
 validateCanvasToolCatalog();
 const layoutFunctionDeclarations = CHAT_CANVAS_TOOLS.map(tool => ({
@@ -162,7 +164,7 @@ Current Canvas Context:
       try {
           if (signal?.aborted) throw new Error("Aborted");
           
-          const generatePromise = ai.models.generateContent({
+          const generatePromise = requestGemini({
             model: modelName,
             contents,
             config: {
@@ -182,7 +184,7 @@ Current Canvas Context:
                 thinkingBudget: 24576,
               },
             },
-          });
+          }, signal);
 
           const response = await generatePromise;
 
