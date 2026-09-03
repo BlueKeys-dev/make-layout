@@ -157,7 +157,7 @@ export const DesignEditorModals = ({
           <LockKeyhole size={18} className="text-amber-400" />
           <div>
             <div className="text-sm font-bold">Agent UI lock is active</div>
-            <div className="text-xs text-slate-400">Human editing is paused. This automatically unlocks after five minutes.</div>
+            <div className="text-xs text-slate-400">Human editing is paused. This automatically unlocks.</div>
           </div>
           <button
             onClick={onUnlockUi}

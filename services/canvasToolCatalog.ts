@@ -216,7 +216,7 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
   {
     name: 'set_ui_lock',
     title: 'Lock or unlock editor UI',
-    description: 'Locks human editing while an agent works, or unlocks it. The page always shows a manual unlock control and auto-unlocks after five minutes.',
+    description: 'Locks human editing while an agent works, or unlocks it. The page always shows a manual unlock control and auto-unlocks fallback: after five minutes.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
