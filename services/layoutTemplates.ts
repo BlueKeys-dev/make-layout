@@ -130,6 +130,21 @@ export const getLayoutOrientation = ({ width, height }: CanvasSize): LayoutOrien
   return width > height ? 'landscape' : 'portrait';
 };
 
+export const getLayoutTemplateCompatibility = (
+  template: Pick<LayoutTemplate, 'name' | 'orientation'>,
+  target: CanvasSize,
+) => {
+  const targetOrientation = getLayoutOrientation(target);
+  const compatible = template.orientation === targetOrientation;
+  return {
+    compatible,
+    targetOrientation,
+    ...(compatible ? {} : {
+      reason: `${template.name} is ${template.orientation}; switch the canvas to ${template.orientation} before loading it.`,
+    }),
+  };
+};
+
 export const validateLayoutTemplate = (value: unknown): LayoutTemplate => {
   if (!isRecord(value) || value.schemaVersion !== 1) {
     throw new LayoutTemplateError('INVALID_TEMPLATE', 'Layout template schemaVersion must be 1.');
@@ -214,11 +229,11 @@ export const instantiateLayoutTemplate = (
   zIndexStart = 1,
 ): CanvasElement[] => {
   const template = validateLayoutTemplate(templateValue);
-  const orientation = getLayoutOrientation(target);
-  if (template.orientation !== orientation) {
+  const compatibility = getLayoutTemplateCompatibility(template, target);
+  if (!compatibility.compatible) {
     throw new LayoutTemplateError(
       'INCOMPATIBLE_CANVAS_ORIENTATION',
-      `${template.name} is ${template.orientation}; switch the canvas to ${template.orientation} before loading it.`,
+      compatibility.reason || 'The layout template is incompatible with this canvas.',
     );
   }
   return template.slots.map((templateSlot, index) => createEmptySlotElement(template, templateSlot, target, zIndexStart + index));

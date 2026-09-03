@@ -12,6 +12,8 @@ export type CanvasToolName =
   | 'load_layout_template'
   | 'set_layout_slot_role'
   | 'set_ui_lock'
+  | 'add_page'
+  | 'configure_canvas'
   | 'search_internet_images'
   | 'add_board'
   | 'add_element'
@@ -46,6 +48,21 @@ const coordinate = (description: string) => ({
   maximum: 100000,
   description,
 });
+const textStyleSchema = {
+  type: 'object',
+  additionalProperties: false,
+  minProperties: 1,
+  description: 'Optional typography for text elements. textStyle.color controls rendered text color.',
+  properties: {
+    fontSize: { type: 'number', minimum: 8, maximum: 200, description: 'Font size in pixels.' },
+    fontWeight: { type: 'string', minLength: 1, maxLength: 40, description: 'CSS font weight such as normal, bold, or 700.' },
+    fontFamily: { type: 'string', minLength: 1, maxLength: 80, description: 'CSS font family.' },
+    fontStyle: { type: 'string', enum: ['normal', 'italic'], description: 'Normal or italic text.' },
+    textAlign: { type: 'string', enum: ['left', 'center', 'right', 'justify'], description: 'Horizontal text alignment.' },
+    color: { type: 'string', minLength: 1, maxLength: 64, description: 'CSS text color.' },
+    lineHeight: { type: 'number', minimum: 0.1, maximum: 10, description: 'Unitless line-height multiplier.' },
+  },
+};
 
 export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
   {
@@ -57,14 +74,20 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
   },
   {
     name: 'describe_tools',
-    title: 'Describe a design tool',
-    description: 'Returns the purpose, parameters, side effects, and usage notes for one named design tool.',
+    title: 'Describe design tools',
+    description: 'Returns complete schemas and annotations for one or more exact tool names from list_tools.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
-      required: ['name'],
+      required: ['names'],
       properties: {
-        name: { type: 'string', enum: [] as string[], description: 'Exact tool name returned by list_tools.' },
+        names: {
+          description: 'One tool name or an array of tool names returned by list_tools. At most 10 are described.',
+          oneOf: [
+            { type: 'string', enum: [] as string[] },
+            { type: 'array', minItems: 1, items: { type: 'string', enum: [] as string[] } },
+          ],
+        },
       },
     },
     annotations: { readOnlyHint: true, untrustedContentHint: false },
@@ -132,7 +155,7 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
   {
     name: 'list_layout_templates',
     title: 'List reusable layouts',
-    description: 'Lists built-in and locally saved layout templates with orientation and slot-count summaries. Use get_layout_template before loading a candidate.',
+    description: 'Lists reusable layout templates with slot counts and compatibility for the active board. Use get_layout_template before loading a candidate.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -146,7 +169,7 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
   {
     name: 'get_layout_template',
     title: 'Inspect reusable layout',
-    description: 'Returns normalized slot geometry for one reusable layout template without changing the canvas.',
+    description: 'Returns normalized slot geometry and active-board compatibility for one reusable layout without changing the canvas.',
     inputSchema: {
       type: 'object',
       additionalProperties: false,
@@ -204,6 +227,44 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
     annotations: { readOnlyHint: false, untrustedContentHint: false },
   },
   {
+    name: 'add_page',
+    title: 'Add workspace page',
+    description: 'Adds one blank workspace page and makes it active. Lock the UI and capture the canvas first.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['expectedRevision'],
+      properties: { expectedRevision },
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+  },
+  {
+    name: 'configure_canvas',
+    title: 'Configure shared canvas',
+    description: 'Atomically updates supplied shared canvas settings for every workspace page. Lock the UI and capture first.',
+    inputSchema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['expectedRevision'],
+      properties: {
+        expectedRevision,
+        width: { type: 'number', exclusiveMinimum: 0, maximum: 100000, description: 'Canvas width in points.' },
+        height: { type: 'number', exclusiveMinimum: 0, maximum: 100000, description: 'Canvas height in points.' },
+        mode: { type: 'string', enum: ['page', 'slide', 'custom'], description: 'Canvas aspect-ratio mode.' },
+        presetName: { type: 'string', minLength: 1, maxLength: 120, description: 'Human-readable preset name.' },
+        isFlipbook: { type: 'boolean', description: 'Whether the canvas displays a two-page spread.' },
+        borderRadius: { type: 'number', minimum: 0, maximum: 100000, description: 'Canvas corner radius.' },
+        backgroundColor: { type: 'string', minLength: 1, maxLength: 64, description: 'CSS canvas background color.' },
+        bleed: { type: 'number', minimum: 0, maximum: 100000, description: 'Bleed size in points.' },
+        showGuides: { type: 'boolean', description: 'Whether safe-area guides are visible.' },
+        gridRows: { type: 'integer', minimum: 1, maximum: 1000, description: 'Grid row count.' },
+        gridCols: { type: 'integer', minimum: 1, maximum: 1000, description: 'Grid column count.' },
+        showGrid: { type: 'boolean', description: 'Whether the canvas grid is visible.' },
+      },
+    },
+    annotations: { readOnlyHint: false, untrustedContentHint: false },
+  },
+  {
     name: 'search_internet_images',
     title: 'Search licensed images',
     description: 'Searches the configured image provider and displays the results in the editor chat for the human and agent to review.',
@@ -252,9 +313,10 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
         y: coordinate('Absolute top position in canvas points.'),
         width: { type: 'number', exclusiveMinimum: 0, maximum: 100000, description: 'Element width in canvas points.' },
         height: { type: 'number', exclusiveMinimum: 0, maximum: 100000, description: 'Element height in canvas points.' },
-        content: { type: 'string', maxLength: 4000, description: 'Text content. Unsafe markup is removed.' },
+        content: { type: 'string', maxLength: 4000, description: 'Text-element content only. Label shapes by adding a separate text element. Unsafe markup is removed.' },
         src: { type: 'string', maxLength: 2048, description: 'HTTPS image URL. Other URL schemes are rejected.' },
-        color: { type: 'string', maxLength: 64, description: 'CSS color value.' },
+        color: { type: 'string', maxLength: 64, description: 'Element fill or background color. For rendered text color, use textStyle.color.' },
+        textStyle: textStyleSchema,
         shapeType: { type: 'string', maxLength: 64, description: 'Existing shape identifier such as rectangle or circle.' },
         vertices: {
           type: 'array',
@@ -367,7 +429,7 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
   {
     name: 'generate_diagram',
     title: 'Generate Mermaid diagram',
-    description: 'Generates a safe Mermaid diagram and inserts it on the visible canvas. Lock the UI and capture the canvas first.',
+    description: 'Generates a safe Mermaid diagram and places it inside the active board. Lock the UI and capture the canvas first. The async auto-resizer may expand the diagram and bump the revision afterward; capture again for final geometry.',
     inputSchema: {
       type: 'object', additionalProperties: false, required: ['expectedRevision', 'prompt', 'diagramType'],
       properties: {
@@ -398,8 +460,11 @@ export const CANVAS_TOOL_CATALOG: CanvasToolCatalogEntry[] = [
 
 const toolNames = CANVAS_TOOL_CATALOG.map(tool => tool.name);
 const describeTool = CANVAS_TOOL_CATALOG.find(tool => tool.name === 'describe_tools');
-const describeName = (describeTool?.inputSchema.properties as Record<string, any>)?.name;
-if (describeName) describeName.enum = toolNames;
+const describeNames = (describeTool?.inputSchema.properties as Record<string, any>)?.names;
+if (describeNames?.oneOf) {
+  describeNames.oneOf[0].enum = toolNames;
+  describeNames.oneOf[1].items.enum = toolNames;
+}
 
 export const CHAT_CANVAS_TOOLS = CANVAS_TOOL_CATALOG.filter(tool => tool.chatCallable);
 

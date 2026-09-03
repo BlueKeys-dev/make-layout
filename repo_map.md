@@ -29,7 +29,7 @@ Last updated: 2026-09-03
 
 ## Reusable layouts
 
-- `services/layoutTemplates.ts` owns the versioned template schema, eight built-in templates, validation, normalized geometry, local persistence, target-relative instantiation, and slot-role conversion.
+- `services/layoutTemplates.ts` owns the versioned template schema, eight built-in templates, validation, orientation compatibility, normalized geometry, local persistence, target-relative instantiation, and slot-role conversion.
 - `components/LayoutLibrary.tsx` renders template previews and triggers load/save/delete callbacks.
 - UI loading flows through `DesignEditor.handleLoadLayoutTemplate`; it resolves the selected board, instantiates absolute slot coordinates for that board, and appends slots without removing existing elements.
 - User-template saving uses the selected board bounds and includes only marked slots fully inside that board.
@@ -37,10 +37,10 @@ Last updated: 2026-09-03
 ## Agent tools
 
 - `services/canvasToolCatalog.ts` is the single WebMCP/chat tool schema catalog.
-- `services/canvasToolEngine.ts` validates and executes tool requests. It owns bounded board listing and inspection, center-point object ownership, and board-local deterministic layout analysis.
+- `services/canvasToolEngine.ts` validates and executes tool requests. It owns bounded discovery, page/config effects, element creation, board ownership, template compatibility reporting, and board-local deterministic layout analysis.
 - `services/layout_maker.ts` owns generated layout plans and the focus-filtered deterministic checks used by layout analysis.
 - `services/webmcp.ts` registers catalog tools and serializes mutations.
-- `hooks/useDesignEditorWebMcp.ts` validates confirmations and revision/UI-lock state, derives one next canvas snapshot, and commits each tool write once through `useCanvasPages`.
+- `hooks/useDesignEditorWebMcp.ts` validates confirmations and revision/UI-lock state, then commits element, page, shared-config, and board-aware diagram effects through the existing React state owners.
 
 ## Rich content and safety
 
@@ -65,6 +65,7 @@ Last updated: 2026-09-03
 
 - `services/layoutTemplates.test.ts` covers reusable layout instantiation and slot-role replacement.
 - `services/canvasToolEngine.test.ts` covers board-local deterministic analysis, container exclusion, and focus filtering.
+- `utils/canvasPlacement.test.ts` covers active-secondary-board placement used by generated diagrams.
 
 ## Change-routing rule
 

@@ -148,18 +148,18 @@ const normalizeTableData = (td: AILayoutElement['tableData']): {
 
   const headers = Array.isArray(td.headers) ? td.headers.filter(h => typeof h === 'string') : [];
   const rawData = Array.isArray(td.data) ? td.data : [];
-  
+
   // Determine column count from headers or longest data row
-  const maxDataCols = rawData.reduce((max, row) => 
+  const maxDataCols = rawData.reduce((max, row) =>
     Array.isArray(row) ? Math.max(max, row.length) : max, 0
   );
   const cols = Math.max(headers.length, maxDataCols, 2);
-  
+
   // Normalize headers to match column count
   const normalizedHeaders = headers.length === cols
     ? headers
     : [...headers, ...Array(cols - headers.length).fill(null).map((_, i) => `Column ${headers.length + i + 1}`)].slice(0, cols);
-  
+
   // Normalize data rows to match column count
   const normalizedData = rawData.map((row: unknown) => {
     if (!Array.isArray(row)) return Array(cols).fill('');
@@ -176,12 +176,12 @@ const normalizeTableData = (td: AILayoutElement['tableData']): {
     if (stringRow.length === cols) return stringRow;
     return [...stringRow, ...Array(cols - stringRow.length).fill('')].slice(0, cols);
   });
-  
+
   // Ensure at least one data row
   if (normalizedData.length === 0) {
     normalizedData.push(Array(cols).fill(''));
   }
-  
+
   return {
     rows: normalizedData.length + 1, // +1 for header row
     cols,
@@ -322,9 +322,9 @@ export const generateLayoutPlan = async (
   imageRegistry?: RegisteredImage[],
   signal?: AbortSignal
 ): Promise<LayoutGenerationResult> => {
-  const { width, height } = { 
-    width: canvasConfig.width * (canvasConfig.isFlipbook ? 2 : 1), 
-    height: canvasConfig.height 
+  const { width, height } = {
+    width: canvasConfig.width * (canvasConfig.isFlipbook ? 2 : 1),
+    height: canvasConfig.height
   };
 
   const existingElementsContext = currentElements.length > 0
@@ -400,14 +400,14 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
     if (error?.name === 'AbortError') throw error;
     const isRateLimit = error.status === 429 || error.message?.includes('RESOURCE_EXHAUSTED') || error.message?.includes('quota');
     console.error('[LayoutMaker] AI generation failed:', error.message || error);
-    throw new Error(isRateLimit 
-      ? 'Rate limit exceeded. Please wait a moment and try again.' 
+    throw new Error(isRateLimit
+      ? 'Rate limit exceeded. Please wait a moment and try again.'
       : 'Layout generation failed. Please try again.');
   }
 
   // Handle response.text as property or method (SDK version compatibility)
-  const text = typeof response.text === 'function' 
-    ? await (response.text as () => Promise<string>)() 
+  const text = typeof response.text === 'function'
+    ? await (response.text as () => Promise<string>)()
     : response.text;
   if (!text) throw new Error('Empty response from layout AI');
 
@@ -416,7 +416,7 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
   if (candidate?.content?.parts) {
     const thoughtParts = candidate.content.parts
       .filter((p: any) => p.thought === true && p.text);
-    
+
     if (thoughtParts.length > 0) {
       console.log("\n==================== LAYOUT AI THOUGHTS ====================");
       thoughtParts.forEach((p: any) => {
@@ -456,7 +456,7 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
   // --- STRICT BOARD LOGIC ENFORCEMENT ---
   // Fix board coordinates to ensure NO OVERLAPS, regardless of AI output
   const boardGap = 100;
-  
+
   const extractBounds = (el: any): { x: number; y: number; w: number; h: number } => ({
     // Fix: Prioritize bounds object, fallback to flat properties for robustness
     x: Number(el.bounds?.x ?? el.x ?? 0),
@@ -464,13 +464,13 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
     w: Number(el.bounds?.width ?? el.w ?? width),
     h: Number(el.bounds?.height ?? el.h ?? height),
   });
-  
+
   // Separate boards (isBoard: true) from other containers and elements
   const boards = (result.elements || []).filter((el: any) => el.type === 'container' && el.isBoard === true);
   const nonBoardElements = (result.elements || []).filter((el: any) => !(el.type === 'container' && el.isBoard === true));
-  
+
   console.log(`[LayoutMaker] Found ${boards.length} boards and ${nonBoardElements.length} other elements`);
-  
+
   // Fix: defined in outer scope for visibility
   const fixedBoards: Array<{ el: any; bounds: { x: number; y: number; w: number; h: number } }> = [];
 
@@ -482,16 +482,16 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
       const bx = extractBounds(b).x;
       return ax - bx;
     });
-    
+
     let currentX = 0;
-    
+
     boards.forEach((board: any, index: number) => {
       const bounds = extractBounds(board);
-      
+
       // Ensure minimum board size (at least canvas size)
       const boardW = Math.max(bounds.w, width);
       const boardH = Math.max(bounds.h, height);
-      
+
       // Update board with fixed position
       if (board.bounds) {
         board.bounds.x = currentX;
@@ -504,45 +504,45 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
         board.w = boardW;
         board.h = boardH;
       }
-      
+
       fixedBoards.push({
         el: board,
         bounds: { x: currentX, y: 0, w: boardW, h: boardH }
       });
-      
+
       console.log(`[LayoutMaker] Board ${index + 1} (${board.name || board.id}): x=${currentX}, w=${boardW}, h=${boardH}`);
-      
+
       // Move to next board position
       currentX += boardW + boardGap;
     });
-    
+
     // --- CONSTRAIN ELEMENTS TO BOARDS ---
     // Ensure all non-board elements are placed INSIDE a board
     nonBoardElements.forEach((el: any) => {
       const elBounds = extractBounds(el);
-      
+
       // Find which board this element belongs to based on its X position
       // Fix #8: Consistent boundary check (using > instead of >= for end range)
       let parentBoard = fixedBoards.find(b => elBounds.x >= b.bounds.x && elBounds.x < b.bounds.x + b.bounds.w);
-      
+
       // If no board found, assign to the first board
       if (!parentBoard && fixedBoards.length > 0) {
         parentBoard = fixedBoards[0];
         console.warn(`[LayoutMaker] Element "${el.name || el.id}" (x=${elBounds.x}) outside all boards, moving to first board`);
       }
-      
+
       if (parentBoard) {
         const margin = LAYOUT_CONSTANTS.SAFE_MARGIN;
         const b = parentBoard.bounds;
-        
+
         // Clamp element to stay within board bounds
         let newX = Math.max(b.x + margin, Math.min(elBounds.x, b.x + b.w - elBounds.w - margin));
         let newY = Math.max(b.y + margin, Math.min(elBounds.y, b.y + b.h - elBounds.h - margin));
-        
+
         // Ensure element doesn't exceed board dimensions
         const newW = Math.min(elBounds.w, b.w - margin * 2);
         const newH = Math.min(elBounds.h, b.h - margin * 2);
-        
+
         // Apply fixed bounds
         if (el.bounds) {
           el.bounds.x = newX;
@@ -557,7 +557,7 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
         }
       }
     });
-    
+
     // --- DETECT AND FIX OVERLAPS WITHIN BOARDS ---
     fixedBoards.forEach((boardInfo, boardIndex) => {
       const boardBounds = boardInfo.bounds; // Fix #7: Renamed 'b' to 'boardBounds' to avoid confusion
@@ -566,7 +566,7 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
         // Fix #8 (Partial): Consistent boundary check
         return elBounds.x >= boardBounds.x && elBounds.x < boardBounds.x + boardBounds.w;
       });
-      
+
       // Fix #6: Multi-pass overlap resolution to handle cascading moves
       const MAX_PASSES = 5;
       let passes = 0;
@@ -583,16 +583,16 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
 
             const boundsA = extractBounds(elA);
             const boundsB = extractBounds(elB);
-            
+
             // Check overlap
             const overlapX = boundsA.x < boundsB.x + boundsB.w && boundsA.x + boundsA.w > boundsB.x;
             const overlapY = boundsA.y < boundsB.y + boundsB.h && boundsA.y + boundsA.h > boundsB.y;
-            
+
             if (overlapX && overlapY) {
               hasOverlap = true;
               // Move element B below element A
               const newY = boundsA.y + boundsA.h + LAYOUT_CONSTANTS.PREFERRED_SPACING;
-              
+
               // Only move if it still fits in the board
               if (newY + boundsB.h <= boardBounds.y + boardBounds.h - LAYOUT_CONSTANTS.SAFE_MARGIN) {
                 if (elB.bounds) {
@@ -608,13 +608,13 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
       }
     });
   }
-  
+
   // Fix #17: If no boards exist (single page), ensure elements fit within canvas
   if (fixedBoards.length === 0) {
     nonBoardElements.forEach((el: any) => {
       const elBounds = extractBounds(el);
       const margin = LAYOUT_CONSTANTS.SAFE_MARGIN;
-      
+
       // Clamp to canvas
       let newX = Math.max(margin, Math.min(elBounds.x, width - elBounds.w - margin));
       let newY = Math.max(margin, Math.min(elBounds.y, height - elBounds.h - margin));
@@ -628,7 +628,7 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
       }
     });
   }
-  
+
   // --- COLOR CONTRAST ENFORCEMENT ---
   // Ensure text is readable against board backgrounds
   const getLuminance = (hex: string): number => {
@@ -651,17 +651,27 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
     } catch (e) { return '#000000'; }
   };
 
+  const contrastRatio = (fgHex: string | undefined, bgHex: string): number => {
+    try {
+      if (!fgHex) return 0;
+      const l1 = getLuminance(fgHex);
+      const l2 = getLuminance(bgHex);
+      const [hi, lo] = l1 > l2 ? [l1, l2] : [l2, l1];
+      return (hi + 0.05) / (lo + 0.05);
+    } catch (e) { return Infinity; }
+  };
+
   // Apply contrast fix to text-containing elements
   // Fix #10: Safe iteration with optional chaining
   result.elements?.forEach((el: any) => {
     if (el.type === 'container') return;
-    
+
     // Only process text-containing element types
     const textTypes = ['text', 'table', 'math'];
     if (!textTypes.includes(el.type)) return;
 
     const elBounds = extractBounds(el);
-    
+
     // Find parent board by position
     const parentBoard = boards.find((c: any) => {
       const cb = extractBounds(c);
@@ -671,12 +681,12 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
     // Get background color: from parent board, or default to white
     const bgColor = parentBoard?.boardConfig?.bgColor || '#ffffff';
     const bestTextColor = getContrastColor(bgColor);
-    
+
     // Apply the contrasting color
     if (el.type === 'text') {
       if (!el.textStyle) el.textStyle = {};
-      // Only override if AI set a potentially bad color or no color
-      if (!el.textStyle.color || el.textStyle.color === bgColor) {
+      // Override when no color, or the chosen color is unreadable against the background
+      if (!el.textStyle.color || contrastRatio(el.textStyle.color, bgColor) < 3) {
         el.textStyle.color = bestTextColor;
         console.log(`[LayoutMaker] Fixed text contrast for "${el.name || el.id}": ${bestTextColor} on ${bgColor}`);
       }
@@ -690,14 +700,14 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
     description: result.reasoning || 'engaging optimized layout with zero overlaps',
     elements: (result.elements || []).map((el: AILayoutElement) => {
       const isCustomPolygon = el.shapeType === 'custom_polygon' && el.vertices;
-      
+
       // Clamp bounds to canvas dimensions for safety
       const safeBounds = clampBounds(el.bounds || (el as any), width, height);
-      
+
       // Log shape_auto_added for shape elements
       if (el.type === 'shape' && el.shapeType) {
-        console.log(JSON.stringify({ 
-          action: 'shape_auto_added', 
+        console.log(JSON.stringify({
+          action: 'shape_auto_added',
           shapeType: el.shapeType,
           vertices: isCustomPolygon ? el.vertices : null,
           polygon_closed: isCustomPolygon,
@@ -737,11 +747,11 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
   // Post-process diagram elements: generate actual Mermaid code from topics
   // Use parallel batch generation for efficiency
   const diagramTypes: DiagramType[] = ['mindmap', 'flowchart', 'sequenceDiagram', 'classDiagram', 'erDiagram', 'pie', 'requirementDiagram'];
-  
+
   // Collect all diagram elements that need generation
   const diagramRequests: BatchDiagramRequest[] = [];
   const diagramElementIndices: number[] = [];
-  
+
   for (let i = 0; i < plan.elements.length; i++) {
     const element = plan.elements[i];
     if (diagramTypes.includes(element.type as DiagramType) && element.mermaidCode) {
@@ -761,21 +771,21 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
       }
     }
   }
-  
+
   // Generate all diagrams in parallel batches
   if (diagramRequests.length > 0) {
     console.log(`[LayoutMaker] Generating ${diagramRequests.length} diagrams in parallel...`);
     const results = await generateDiagramsBatch(diagramRequests, 2, signal);
-    
+
     // Apply results to elements
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
       const elementIndex = diagramElementIndices[i];
       const element = plan.elements[elementIndex];
-      
+
       element.mermaidCode = result.code;
       element.type = 'mindmap' as ElementType; // Normalize for consistent rendering
-      
+
       if (result.error) {
         console.warn(`[LayoutMaker] Diagram ${result.id} used fallback: ${result.error}`);
       }
@@ -791,7 +801,7 @@ Plan an optimal layout. Return precise coordinates for all elements.`;
       const isProvidedImage = src === 'PROVIDED_IMAGE';
       const trustedDomains = ['picsum.photos', 'unsplash.com', 'pexels.com', 'pixabay.com', 'weserv.nl', 'images.unsplash.com'];
       const isTrustedSource = trustedDomains.some(domain => src.includes(domain));
-      
+
       // Only replace if genuinely invalid (empty, or not valid URL/registry/provided)
       if (!src || (!isValidUrl && !isRegistryRef && !isProvidedImage)) {
         const imgWidth = Math.round(element.w) || 400;
@@ -817,9 +827,9 @@ export const chatWithLayoutAI = async (
   messages: Array<{ role: 'user' | 'assistant'; content: string }>,
   canvasConfig: CanvasConfig
 ): Promise<string> => {
-  const { width, height } = { 
-    width: canvasConfig.width * (canvasConfig.isFlipbook ? 2 : 1), 
-    height: canvasConfig.height 
+  const { width, height } = {
+    width: canvasConfig.width * (canvasConfig.isFlipbook ? 2 : 1),
+    height: canvasConfig.height
   };
 
   const contextPrompt = `You are helping plan engaging layouts for a ${width}×${height}pt ${canvasConfig.presetName} canvas.`;
@@ -840,8 +850,8 @@ export const chatWithLayoutAI = async (
   });
 
   // Fix #5: Handle response.text as property or method (SDK version compatibility)
-  const text = typeof response.text === 'function' 
-    ? await (response.text as () => Promise<string>)() 
+  const text = typeof response.text === 'function'
+    ? await (response.text as () => Promise<string>)()
     : response.text;
 
   return text || 'I understand. How would you like to proceed with the layout?';

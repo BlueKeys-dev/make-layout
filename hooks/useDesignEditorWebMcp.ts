@@ -4,8 +4,9 @@ import type { CanvasConfig, CanvasElement, ChatMessage, LayoutPlan } from '../ty
 import type { CanvasToolOutcome } from '../services/canvasToolEngine';
 import { registerDesignTools } from '../services/webmcp';
 import type { CanvasToolApplyResult } from '../services/webmcp';
-import type { SetCanvasElements } from './useCanvasPages';
-import { getNextElementZIndex, placeElementAtViewportCenter } from '../utils/canvasPlacement';
+import type { SetCanvasElements, SetCanvasPages } from './useCanvasPages';
+import { getNextElementZIndex, placeElementInCanvas } from '../utils/canvasPlacement';
+import { CANVAS_CONFIG_STORAGE_VERSION, parseCanvasConfig } from '../config/canvasDefaults';
 
 type CurrentRef<T> = { current: T };
 
@@ -38,11 +39,12 @@ type UseDesignEditorWebMcpOptions = {
   activeBoardIdRef: CurrentRef<string | null>;
   uiLockedRef: CurrentRef<boolean>;
   canvasRevisionRef: CurrentRef<number>;
-  scaleRef: CurrentRef<number>;
-  viewPosRef: CurrentRef<{ x: number; y: number }>;
   activeBoard: CanvasElement | null;
   confirmationOpen: boolean;
   requestConfirmation: ConfirmationRequest;
+  setPages: SetCanvasPages;
+  setCurrentPage: Dispatch<SetStateAction<number>>;
+  setCanvasConfig: Dispatch<SetStateAction<CanvasConfig>>;
   setElements: SetCanvasElements;
   setSelectedIds: Dispatch<SetStateAction<string[]>>;
   setIsUiLocked: Dispatch<SetStateAction<boolean>>;
@@ -59,11 +61,12 @@ export const useDesignEditorWebMcp = ({
   activeBoardIdRef,
   uiLockedRef,
   canvasRevisionRef,
-  scaleRef,
-  viewPosRef,
   activeBoard,
   confirmationOpen,
   requestConfirmation,
+  setPages,
+  setCurrentPage,
+  setCanvasConfig,
   setElements,
   setSelectedIds,
   setIsUiLocked,
@@ -155,6 +158,20 @@ export const useDesignEditorWebMcp = ({
     let nextSelectedIds = selectedIdsRef.current;
     let canvasChanged = false;
 
+    if (effects.pageToAdd) {
+      setPages(previousPages => [...previousPages, []]);
+      setCurrentPage(effects.pageToAdd.index);
+      setSelectedIds([]);
+    }
+
+    if (effects.canvasConfigUpdates) {
+      setCanvasConfig(current => parseCanvasConfig({
+        ...current,
+        ...effects.canvasConfigUpdates,
+        _v: CANVAS_CONFIG_STORAGE_VERSION,
+      }));
+    }
+
     if (removalTarget) {
       nextElements = nextElements.filter(element => element.id !== removalTarget.id);
       nextSelectedIds = nextSelectedIds.filter(id => id !== removalTarget.id);
@@ -189,12 +206,17 @@ export const useDesignEditorWebMcp = ({
 
     if (effects.diagramCode) {
       const size = { width: 500, height: 400 };
-      const position = placeElementAtViewportCenter(
-        viewPosRef.current,
-        scaleRef.current,
-        { width: window.innerWidth, height: window.innerHeight },
+      const currentConfig = canvasConfigRef.current;
+      const position = placeElementInCanvas({
+        elements: nextElements,
+        activeBoardId: activeBoardIdRef.current,
+        fallback: {
+          width: currentConfig.isFlipbook ? currentConfig.width * 2 : currentConfig.width,
+          height: currentConfig.height,
+        },
         size,
-      );
+        avoidOverlap: true,
+      });
       const diagram: CanvasElement = {
         id: crypto.randomUUID(),
         type: 'mindmap',
@@ -230,14 +252,15 @@ export const useDesignEditorWebMcp = ({
     confirmationOpen,
     elementsRef,
     requestConfirmation,
-    scaleRef,
     selectedIdsRef,
+    setCanvasConfig,
+    setCurrentPage,
     setElements,
     setIsUiLocked,
     setPendingPlan,
+    setPages,
     setSelectedIds,
     uiLockedRef,
-    viewPosRef,
   ]);
 
   applyOutcomeRef.current = applyCanvasToolOutcome;

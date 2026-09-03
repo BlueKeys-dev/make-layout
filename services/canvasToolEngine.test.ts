@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { CanvasElement } from '../types.ts';
 import { executeCanvasTool } from './canvasToolEngine.ts';
 import type { CanvasToolExecutionContext } from './canvasToolEngine.ts';
+import { CANVAS_TOOL_CATALOG } from './canvasToolCatalog.ts';
 
 const canvasConfig = {
   width: 595,
@@ -19,7 +20,10 @@ const canvasConfig = {
   showGrid: false,
 };
 
-const contextWith = (elements: CanvasElement[]): CanvasToolExecutionContext => ({
+const contextWith = (
+  elements: CanvasElement[],
+  overrides: Partial<CanvasToolExecutionContext> = {},
+): CanvasToolExecutionContext => ({
   elements,
   canvasConfig,
   currentPage: 0,
@@ -29,6 +33,90 @@ const contextWith = (elements: CanvasElement[]): CanvasToolExecutionContext => (
   revision: 1,
   uiLocked: false,
   requireUiLock: true,
+  ...overrides,
+});
+
+test('describes complete schemas for one or up to ten requested tools', async () => {
+  const one = await executeCanvasTool('describe_tools', { names: 'add_element' }, contextWith([]));
+  const requestedNames = CANVAS_TOOL_CATALOG.slice(0, 11).map(tool => tool.name);
+  const capped = await executeCanvasTool('describe_tools', { names: requestedNames }, contextWith([]));
+
+  const described = (one.data?.tools as Array<Record<string, any>>)[0];
+  assert.equal(described.name, 'add_element');
+  assert.equal(described.inputSchema.properties.textStyle.type, 'object');
+  assert.match(described.inputSchema.properties.color.description, /textStyle\.color/);
+  assert.equal((capped.data?.tools as unknown[]).length, 10);
+});
+
+test('guards page creation and emits one page addition for the current revision', async () => {
+  const unlocked = await executeCanvasTool('add_page', { expectedRevision: 1 }, contextWith([]));
+  const stale = await executeCanvasTool('add_page', { expectedRevision: 0 }, contextWith([], { uiLocked: true }));
+  const valid = await executeCanvasTool('add_page', { expectedRevision: 1 }, contextWith([], { uiLocked: true }));
+
+  assert.equal(unlocked.error?.code, 'UI_NOT_LOCKED');
+  assert.equal(stale.error?.code, 'STALE_CANVAS');
+  assert.deepEqual(valid.effects?.pageToAdd, { index: 1 });
+  assert.deepEqual(valid.data, { pageIndex: 1, pageCount: 2 });
+});
+
+test('configures supplied canvas fields without replacing unspecified settings', async () => {
+  const context = contextWith([], { uiLocked: true });
+  const valid = await executeCanvasTool('configure_canvas', {
+    expectedRevision: 1,
+    backgroundColor: '#101827',
+    width: 960,
+  }, context);
+  const invalid = await executeCanvasTool('configure_canvas', {
+    expectedRevision: 1,
+    showGuides: 'yes',
+  }, context);
+
+  assert.deepEqual(valid.effects?.canvasConfigUpdates, { width: 960, backgroundColor: '#101827' });
+  assert.equal((valid.data?.canvas as typeof canvasConfig).bleed, canvasConfig.bleed);
+  assert.equal((valid.data?.canvas as typeof canvasConfig).showGuides, canvasConfig.showGuides);
+  assert.equal(invalid.error?.code, 'INVALID_INPUT');
+});
+
+test('adds text typography and rejects textStyle on non-text elements', async () => {
+  const base = {
+    expectedRevision: 1,
+    name: 'Title',
+    x: 10,
+    y: 20,
+    width: 300,
+    height: 80,
+  };
+  const originalDocument = globalThis.document;
+  const template = {
+    content: { querySelectorAll: () => [] },
+    innerHTML: '',
+  };
+  globalThis.document = { createElement: () => template } as unknown as Document;
+  let styledText;
+  let styledShape;
+  try {
+    styledText = await executeCanvasTool('add_element', {
+      ...base,
+      elementType: 'text',
+      content: 'Hello',
+      textStyle: { fontSize: 36, fontWeight: '700', textAlign: 'center', color: '#ffffff' },
+    }, contextWith([], { uiLocked: true }));
+    styledShape = await executeCanvasTool('add_element', {
+      ...base,
+      elementType: 'shape',
+      textStyle: { fontSize: 36 },
+    }, contextWith([], { uiLocked: true }));
+  } finally {
+    globalThis.document = originalDocument;
+  }
+
+  assert.deepEqual(styledText.effects?.elementToAdd?.textStyle, {
+    fontSize: 36,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: '#ffffff',
+  });
+  assert.equal(styledShape.error?.code, 'INVALID_INPUT');
 });
 
 test('analyzes elements in their owning board coordinates and excludes board containers', async () => {

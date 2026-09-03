@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assignLayoutSlotRole, instantiateLayoutTemplate } from './layoutTemplates.ts';
+import { assignLayoutSlotRole, getLayoutTemplateCompatibility, instantiateLayoutTemplate } from './layoutTemplates.ts';
 
 const portraitTemplate = {
   schemaVersion: 1 as const,
@@ -54,4 +54,16 @@ test('refuses to replace a filled slot unless replacement is explicit', () => {
   assert.equal(replaced.type, 'image');
   assert.equal(replaced.content, undefined);
   assert.equal(replaced.layoutSlot?.role, 'image');
+});
+
+test('reports template compatibility for the selected board orientation', () => {
+  assert.deepEqual(
+    getLayoutTemplateCompatibility(portraitTemplate, { width: 600, height: 800 }),
+    { compatible: true, targetOrientation: 'portrait' },
+  );
+
+  const incompatible = getLayoutTemplateCompatibility(portraitTemplate, { width: 900, height: 500 });
+  assert.equal(incompatible.compatible, false);
+  assert.equal(incompatible.targetOrientation, 'landscape');
+  assert.match(incompatible.reason || '', /switch the canvas to portrait/);
 });

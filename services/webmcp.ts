@@ -48,6 +48,7 @@ const combineAbortSignals = (...signals: Array<AbortSignal | undefined>) => {
 };
 
 const fitOutputBudget = (result: Record<string, unknown>) => {
+  if (result.tool === 'describe_tools') return result;
   if (JSON.stringify(result).length <= 1500) return result;
   const data = result.data && typeof result.data === 'object' ? { ...(result.data as Record<string, unknown>) } : undefined;
   if (data && Array.isArray(data.items)) {

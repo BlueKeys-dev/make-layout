@@ -1,4 +1,4 @@
-import { CanvasConfig, CanvasElement, LayoutPlan, LayoutRole, ShapeType } from '../types';
+import { CanvasConfig, CanvasElement, LayoutPlan, LayoutRole, ShapeType, TextStyle } from '../types';
 import { DiagramType, DIAGRAM_CONFIGS } from '../types/diagramTypes';
 import { richTextToPlainText, sanitizeMermaidSource, sanitizeRichText } from '../utils/contentSecurity';
 import { generateLayoutPlan, validateLayout } from './layout_maker';
@@ -10,6 +10,7 @@ import { createContainerBoard } from '../utils/elementRegistry';
 import {
   assignLayoutSlotRole,
   getLayoutTemplates,
+  getLayoutTemplateCompatibility,
   instantiateLayoutTemplate,
   LayoutTemplateError,
 } from './layoutTemplates';
@@ -36,6 +37,8 @@ export interface CanvasToolEffects {
   diagramCode?: string;
   diagramType?: DiagramType;
   uiLocked?: boolean;
+  pageToAdd?: { index: number };
+  canvasConfigUpdates?: Partial<CanvasConfig>;
   layoutElementsToAdd?: CanvasElement[];
   elementReplacement?: CanvasElement;
 }
@@ -72,6 +75,38 @@ const number = (value: unknown, field: string, min = -100000, max = 100000): num
 const integer = (value: unknown, field: string, min: number, max: number): number => {
   const parsed = number(value, field, min, max);
   if (!Number.isInteger(parsed)) throw new Error(`${field} must be an integer.`);
+  return parsed;
+};
+
+const boolean = (value: unknown, field: string): boolean => {
+  if (typeof value !== 'boolean') throw new Error(`${field} must be true or false.`);
+  return value;
+};
+
+const parseTextStyle = (value: unknown): TextStyle => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('textStyle must be an object.');
+  const style = value as Record<string, unknown>;
+  const allowed = new Set(['fontSize', 'fontWeight', 'fontFamily', 'fontStyle', 'textAlign', 'color', 'lineHeight']);
+  const unexpected = Object.keys(style).find(key => !allowed.has(key));
+  if (unexpected) throw new Error(`Unexpected textStyle parameter: ${unexpected}.`);
+  if (Object.keys(style).length === 0) throw new Error('textStyle must contain at least one typography setting.');
+
+  const parsed: TextStyle = {};
+  if (style.fontSize !== undefined) parsed.fontSize = number(style.fontSize, 'textStyle.fontSize', 8, 200);
+  if (style.fontWeight !== undefined) parsed.fontWeight = text(style.fontWeight, 'textStyle.fontWeight', 40);
+  if (style.fontFamily !== undefined) parsed.fontFamily = text(style.fontFamily, 'textStyle.fontFamily', 80);
+  if (style.fontStyle !== undefined) {
+    const fontStyle = text(style.fontStyle, 'textStyle.fontStyle', 20);
+    if (fontStyle !== 'normal' && fontStyle !== 'italic') throw new Error('textStyle.fontStyle must be normal or italic.');
+    parsed.fontStyle = fontStyle;
+  }
+  if (style.textAlign !== undefined) {
+    const textAlign = text(style.textAlign, 'textStyle.textAlign', 20);
+    if (!['left', 'center', 'right', 'justify'].includes(textAlign)) throw new Error('textStyle.textAlign is not supported.');
+    parsed.textAlign = textAlign as TextStyle['textAlign'];
+  }
+  if (style.color !== undefined) parsed.color = text(style.color, 'textStyle.color', 64);
+  if (style.lineHeight !== undefined) parsed.lineHeight = number(style.lineHeight, 'textStyle.lineHeight', 0.1, 10);
   return parsed;
 };
 
@@ -238,6 +273,24 @@ const getBoardState = (context: CanvasToolExecutionContext) => {
   return { boards, objectsByBoard, unownedObjects };
 };
 
+const getActiveLayoutTarget = (context: CanvasToolExecutionContext) => {
+  const targetBoard = context.activeBoardId
+    ? context.elements.find(element => element.id === context.activeBoardId && element.type === 'container')
+    : undefined;
+  if (context.activeBoardId && !targetBoard) {
+    throw new LayoutTemplateError('BOARD_NOT_FOUND', 'The selected board no longer exists. Capture the canvas and select a board again.');
+  }
+  const target = targetBoard
+    ? { x: targetBoard.x, y: targetBoard.y, width: targetBoard.w, height: targetBoard.h }
+    : {
+        x: 0,
+        y: 0,
+        width: context.canvasConfig.isFlipbook ? context.canvasConfig.width * 2 : context.canvasConfig.width,
+        height: context.canvasConfig.height,
+      };
+  return { targetBoard, target, targetBoardId: targetBoard?.id || 'primary' };
+};
+
 const boundedPage = (base: Record<string, unknown>, items: Record<string, unknown>[], offset: number) => {
   const accepted: Record<string, unknown>[] = [];
   for (const item of items) {
@@ -308,22 +361,24 @@ export const executeCanvasTool = async (
     }
 
     if (tool === 'describe_tools') {
-      const name = text(input.name, 'name', 128) as CanvasToolName;
-      const entry = CANVAS_TOOL_CATALOG.find(candidate => candidate.name === name);
-      if (!entry) return fail(tool, 'UNKNOWN_TOOL', `No design tool named "${name}" exists.`, 'name');
+      const requestedNames = (Array.isArray(input.names) ? input.names : [input.names]).slice(0, 10);
+      if (requestedNames.length === 0) return fail(tool, 'INVALID_INPUT', 'names must contain at least one tool name.', 'names');
+      const names = requestedNames.map((name, index) => text(name, `names[${index}]`, 128) as CanvasToolName);
+      const entries = names.map(name => CANVAS_TOOL_CATALOG.find(candidate => candidate.name === name));
+      const missingIndex = entries.findIndex(entry => !entry);
+      if (missingIndex >= 0) return fail(tool, 'UNKNOWN_TOOL', `No design tool named "${names[missingIndex]}" exists.`, 'names');
       return {
         success: true,
         tool,
-        message: `Description for ${name}.`,
+        message: `Descriptions for ${entries.length} design tools.`,
         data: {
-          name: entry.name,
-          title: entry.title,
-          description: entry.description,
-          required: (entry.inputSchema.required as string[] | undefined) || [],
-          parameters: Object.keys((entry.inputSchema.properties as Record<string, unknown> | undefined) || {}),
-          readOnly: entry.annotations.readOnlyHint,
-          untrustedOutput: entry.annotations.untrustedContentHint,
-          deprecated: Boolean(entry.deprecated),
+          tools: entries.map(entry => ({
+            name: entry!.name,
+            title: entry!.title,
+            description: entry!.description,
+            inputSchema: entry!.inputSchema,
+            annotations: entry!.annotations,
+          })),
         },
       };
     }
@@ -406,6 +461,7 @@ export const executeCanvasTool = async (
     if (tool === 'list_layout_templates') {
       const { offset, limit } = readWindow(input);
       const library = getLayoutTemplates();
+      const { target, targetBoardId } = getActiveLayoutTarget(context);
       const items = library.templates.slice(offset, offset + limit).map(template => ({
         id: template.id,
         name: template.name,
@@ -413,6 +469,8 @@ export const executeCanvasTool = async (
         orientation: template.orientation,
         source: template.source,
         slotCount: template.slots.length,
+        targetBoardId,
+        ...getLayoutTemplateCompatibility(template, target),
       }));
       return {
         success: true,
@@ -427,6 +485,7 @@ export const executeCanvasTool = async (
       const library = getLayoutTemplates();
       const template = library.templates.find(candidate => candidate.id === templateId);
       if (!template) return fail(tool, 'UNKNOWN_TEMPLATE', `No layout template named "${templateId}" exists.`, 'templateId');
+      const { target, targetBoardId } = getActiveLayoutTarget(context);
       return {
         success: true,
         tool,
@@ -438,6 +497,8 @@ export const executeCanvasTool = async (
           orientation: template.orientation,
           source: template.source,
           slotCount: template.slots.length,
+          targetBoardId,
+          ...getLayoutTemplateCompatibility(template, target),
           slots: template.slots.map(templateSlot => ({
             id: templateSlot.id,
             name: templateSlot.name,
@@ -527,6 +588,45 @@ export const executeCanvasTool = async (
     const expected = validateMutation(tool, input, context);
     if (typeof expected !== 'number') return expected;
 
+    if (tool === 'add_page') {
+      return {
+        success: true,
+        tool,
+        message: `Added workspace page ${context.pageCount + 1}.`,
+        data: { pageIndex: context.pageCount, pageCount: context.pageCount + 1 },
+        effects: { expectedRevision: expected, pageToAdd: { index: context.pageCount } },
+      };
+    }
+
+    if (tool === 'configure_canvas') {
+      const updates: Partial<CanvasConfig> = {};
+      if (input.width !== undefined) updates.width = number(input.width, 'width', 0.1, 100000);
+      if (input.height !== undefined) updates.height = number(input.height, 'height', 0.1, 100000);
+      if (input.mode !== undefined) {
+        const mode = text(input.mode, 'mode', 20);
+        if (!['page', 'slide', 'custom'].includes(mode)) throw new Error('mode must be page, slide, or custom.');
+        updates.mode = mode as CanvasConfig['mode'];
+      }
+      if (input.presetName !== undefined) updates.presetName = text(input.presetName, 'presetName', 120);
+      if (input.isFlipbook !== undefined) updates.isFlipbook = boolean(input.isFlipbook, 'isFlipbook');
+      if (input.borderRadius !== undefined) updates.borderRadius = number(input.borderRadius, 'borderRadius', 0, 100000);
+      if (input.backgroundColor !== undefined) updates.backgroundColor = text(input.backgroundColor, 'backgroundColor', 64);
+      if (input.bleed !== undefined) updates.bleed = number(input.bleed, 'bleed', 0, 100000);
+      if (input.showGuides !== undefined) updates.showGuides = boolean(input.showGuides, 'showGuides');
+      if (input.gridRows !== undefined) updates.gridRows = integer(input.gridRows, 'gridRows', 1, 1000);
+      if (input.gridCols !== undefined) updates.gridCols = integer(input.gridCols, 'gridCols', 1, 1000);
+      if (input.showGrid !== undefined) updates.showGrid = boolean(input.showGrid, 'showGrid');
+      if (Object.keys(updates).length === 0) throw new Error('Provide at least one canvas setting to update.');
+      const nextConfig = { ...context.canvasConfig, ...updates };
+      return {
+        success: true,
+        tool,
+        message: 'Updated the shared canvas configuration.',
+        data: { canvas: nextConfig },
+        effects: { expectedRevision: expected, canvasConfigUpdates: updates },
+      };
+    }
+
     if (tool === 'add_board') {
       const effectiveWidth = context.canvasConfig.isFlipbook ? context.canvasConfig.width * 2 : context.canvasConfig.width;
       const rightmost = context.elements.length > 0
@@ -581,20 +681,7 @@ export const executeCanvasTool = async (
       const library = getLayoutTemplates();
       const template = library.templates.find(candidate => candidate.id === templateId);
       if (!template) return fail(tool, 'UNKNOWN_TEMPLATE', `No layout template named "${templateId}" exists.`, 'templateId');
-      const targetBoard = context.activeBoardId
-        ? context.elements.find(element => element.id === context.activeBoardId && element.type === 'container')
-        : undefined;
-      if (context.activeBoardId && !targetBoard) {
-        return fail(tool, 'BOARD_NOT_FOUND', 'The selected board no longer exists. Capture the canvas and select a board again.');
-      }
-      const target = targetBoard
-        ? { x: targetBoard.x, y: targetBoard.y, width: targetBoard.w, height: targetBoard.h }
-        : {
-            x: 0,
-            y: 0,
-            width: context.canvasConfig.isFlipbook ? context.canvasConfig.width * 2 : context.canvasConfig.width,
-            height: context.canvasConfig.height,
-          };
+      const { targetBoard, target } = getActiveLayoutTarget(context);
       const zIndexStart = context.elements.reduce((max, element) => Math.max(max, element.zIndex), 0) + 1;
       const layoutElements = instantiateLayoutTemplate(template, target, zIndexStart);
       const targetName = targetBoard?.name || 'main board';
@@ -648,7 +735,11 @@ export const executeCanvasTool = async (
         color: typeof input.color === 'string' ? input.color.slice(0, 64) : '#e2e8f0',
         zIndex: context.elements.reduce((max, element) => Math.max(max, element.zIndex), 0) + 1,
       };
-      if (elementType === 'text') element.content = sanitizeRichText(typeof input.content === 'string' ? input.content.slice(0, 4000) : 'New Text');
+      if (input.textStyle !== undefined && elementType !== 'text') throw new Error('textStyle is supported only for text elements.');
+      if (elementType === 'text') {
+        element.content = sanitizeRichText(typeof input.content === 'string' ? input.content.slice(0, 4000) : 'New Text');
+        if (input.textStyle !== undefined) element.textStyle = parseTextStyle(input.textStyle);
+      }
       if (elementType === 'image') element.src = safeImageSource(input.src);
       if (elementType === 'shape') {
         element.shapeType = (input.shapeType === undefined ? 'rectangle' : text(input.shapeType, 'shapeType', 64)) as ShapeType;

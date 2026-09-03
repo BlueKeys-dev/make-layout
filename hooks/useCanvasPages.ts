@@ -9,6 +9,11 @@ export type SetCanvasElements = (
   shouldPush?: boolean,
 ) => void;
 
+export type SetCanvasPages = (
+  value: CanvasElement[][] | ((previous: CanvasElement[][]) => CanvasElement[][]),
+  shouldPush?: boolean,
+) => void;
+
 const normalizeContainerBoard = (element: CanvasElement): CanvasElement => {
   if (element.type !== 'container') return element;
   return {

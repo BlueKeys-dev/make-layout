@@ -78,6 +78,8 @@ export const MultiAIChatPanel: React.FC<MultiAIChatPanelProps> = ({
   if (isPanelHidden) {
     return (
       <div className="absolute bottom-2 right-4 sm:bottom-3 sm:right-4 z-50">
+        {/* The chat launcher is intentionally hidden while keeping its code available. */}
+        {/*
         <button
           type="button"
           onClick={() => setIsPanelHidden(false)}
@@ -87,6 +89,7 @@ export const MultiAIChatPanel: React.FC<MultiAIChatPanelProps> = ({
         >
           <Sparkles size={20} fill="currentColor" />
         </button>
+        */}
       </div>
     );
   }

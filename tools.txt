@@ -23,9 +23,9 @@ The lock has a visible human Unlock button and expires after five minutes. Read 
 ## `describe_tools`
 
 - Mode: read-only
-- Input: `name` — one exact name from `list_tools`.
-- Does: explains that tool's purpose, parameters, side effects, trust annotation, and deprecation state.
-- Returns: one bounded description.
+- Input: `names` — one exact tool name or an array of names from `list_tools`; at most 10 are described.
+- Does: returns complete schemas and annotations for the requested tools.
+- Returns: one `tools` array. Empty and unknown names are rejected.
 
 ## `get_canvas_text`
 
@@ -59,7 +59,7 @@ The lock has a visible human Unlock button and expires after five minutes. Read 
 
 - Mode: read-only
 - Input: optional `offset` and `limit` (maximum 10).
-- Does: lists built-in and locally saved reusable layouts with orientation and slot-count summaries.
+- Does: lists built-in and locally saved reusable layouts with orientation, slot-count, target-board, and compatibility summaries.
 - Returns: a paginated template summary.
 
 ## `get_layout_template`
@@ -90,6 +90,20 @@ The lock has a visible human Unlock button and expires after five minutes. Read 
 - Does: locks or unlocks human editing while an agent works. It does not change the canvas revision.
 - Returns: lock state and the five-minute automatic recovery timeout.
 
+## `add_page`
+
+- Mode: workspace write; requires UI lock
+- Input: `expectedRevision`.
+- Does: adds one blank workspace page through the existing page-history path and makes it active.
+- Returns: the new zero-based page index, page count, and revision.
+
+## `configure_canvas`
+
+- Mode: shared canvas write; requires UI lock
+- Input: `expectedRevision` plus at least one existing canvas configuration field.
+- Does: strictly validates and atomically updates the shared format, dimensions, background, flipbook, border, bleed, guide, or grid settings for every workspace page.
+- Returns: the resulting shared canvas configuration and revision.
+
 ## `search_internet_images`
 
 - Mode: UI write; untrusted output
@@ -107,8 +121,9 @@ The lock has a visible human Unlock button and expires after five minutes. Read 
 ## `add_element`
 
 - Mode: canvas write; requires UI lock
-- Input: `expectedRevision`, `elementType`, `name`, absolute `x`/`y`, `width`, `height`, plus type-specific `content`, `src`, `color`, `shapeType`, or `vertices`.
-- Does: adds one text, shape, or HTTPS image element and selects it. Unsafe text markup and non-HTTPS image URLs are rejected or removed.
+- Input: `expectedRevision`, `elementType`, `name`, absolute `x`/`y`, `width`, `height`, plus type-specific `content`, `src`, `color`, `textStyle`, `shapeType`, or `vertices`.
+- Does: adds one text, shape, or HTTPS image element and selects it. `textStyle` applies only to text; use `textStyle.color` for rendered text color. Unsafe markup and non-HTTPS image URLs are rejected or removed.
+- Labeled-shape recipe: add the shape, then add a separate text element over it. Shape content is not a separate rendering feature.
 - Returns: created element ID, type, name, bounds, and new revision.
 
 ## `add_table`
@@ -157,7 +172,7 @@ The lock has a visible human Unlock button and expires after five minutes. Read 
 
 - Mode: canvas write; requires UI lock; untrusted output
 - Input: `expectedRevision`, `prompt`, and `diagramType`.
-- Does: generates sanitized Mermaid source, inserts the visible diagram, and selects it. Supported types include mindmap, flowchart, sequence, class, ER, pie, requirement, and auto.
+- Does: generates sanitized Mermaid source, places the visible diagram inside the active board using board-aware overlap avoidance, and selects it. Supported types include mindmap, flowchart, sequence, class, ER, pie, requirement, and auto. Mermaid's asynchronous auto-resizer may expand the diagram beyond the board after insertion and bump the revision; capture the canvas again for the final geometry.
 - Returns: diagram type, bounded source metadata, and new revision.
 
 ## `generate_mind_map`
