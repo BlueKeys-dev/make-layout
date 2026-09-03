@@ -211,6 +211,9 @@ export const generateMindMapCode = async (
   let targetType: DiagramType = diagramType === 'auto' ? 'mindmap' : diagramType;
   let lastError: any = null;
 
+  // Configuration errors are permanent: fail fast before any retry loop.
+  const client = getClient();
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       signal?.throwIfAborted();
@@ -219,7 +222,7 @@ export const generateMindMapCode = async (
       // Handle Auto Mode - detect best diagram type
       if (diagramType === 'auto' && attempt === 0) {
         try {
-          const autoResponse = await getClient().models.generateContent({
+          const autoResponse = await client.models.generateContent({
             model: modelName,
             contents: { parts: [{ text: `${AUTO_DETECT_PROMPT}\n\nUser Prompt: "${sanitizedPrompt}"` }] },
             config: { responseMimeType: "application/json", abortSignal: signal }

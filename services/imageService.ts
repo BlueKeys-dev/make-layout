@@ -86,37 +86,27 @@ export const resolveImageReferences = (
 };
 
 export const searchImages = async (query: string, signal?: AbortSignal): Promise<ImageSearchResult[]> => {
-  const ACCESS_KEY = typeof process !== 'undefined' ? process.env.UNSPLASH_ACCESS_KEY : undefined;
-
-  if (!ACCESS_KEY) {
-    console.error("Missing UNSPLASH_ACCESS_KEY");
-    return [];
-  }
-
+  // Search always goes through the /api/search-images serverless route, which
+  // owns UNSPLASH_ACCESS_KEY. Static or unconfigured deployments return [].
   try {
-    const response = await fetch(
-      `https://api.unsplash.com/search/photos?query=${encodeURIComponent(query)}&per_page=10&orientation=landscape`,
-      {
-        headers: {
-          Authorization: `Client-ID ${ACCESS_KEY}`,
-        },
-        signal,
-      }
-    );
+    const response = await fetch('/api/search-images', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+      signal,
+    });
 
-    if (!response.ok) {
-      console.error(`Unsplash API Error: ${response.status} ${response.statusText}`);
-      return [];
-    }
+    if (!response.ok) return [];
 
     const data = await response.json();
-    return data.results.map((result: any) => ({
+    const results = Array.isArray(data?.results) ? data.results : [];
+    return results.map((result: any) => ({
       id: result.id,
-      url: result.urls.regular,
-      thumbnail: result.urls.small,
-      alt: result.alt_description || "Unsplash Image",
-      photographer: result.user.name,
-      photographerUrl: result.user.links.html,
+      url: result.url,
+      thumbnail: result.thumbnail,
+      alt: result.alt,
+      photographer: result.photographer,
+      photographerUrl: result.photographerUrl,
     }));
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') throw error;

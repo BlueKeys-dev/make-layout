@@ -28,17 +28,17 @@ const createP5Html = (code: string): string => `
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body { 
-      width: 100%; 
-      height: 100%; 
-      overflow: hidden; 
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
       background: #1a1a1a;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    canvas { 
-      display: block; 
+    canvas {
+      display: block;
       max-width: 100%;
       max-height: 100%;
     }
@@ -141,7 +141,9 @@ export const P5Generator: React.FC<P5GeneratorProps> = ({ onClose, onInsert, ond
             setIsPlaying(true);
             console.log('[P5Generator] Generation successful');
         } catch (e: any) {
-            console.error('[P5Generator] Generation error:', e);
+            const isUnconfigured = e?.message?.includes('not configured');
+            if (isUnconfigured) console.warn('[P5Generator] Generation unavailable:', e.message);
+            else console.error('[P5Generator] Generation error:', e);
 
             // Provide more user-friendly error messages
             let errorMessage = 'Failed to generate animation. ';

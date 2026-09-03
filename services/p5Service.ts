@@ -85,11 +85,14 @@ function keyPressed() { }
 
   let lastError: any = null;
 
+  // Configuration errors are permanent: fail fast before any retry loop.
+  const client = getClient();
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       console.log(`[P5Service] Gemini attempt ${attempt + 1}/${maxRetries}`);
 
-      const response = await getClient().models.generateContent({
+      const response = await client.models.generateContent({
         model: modelName,
         contents: { parts: [{ text: prompt }] },
         config: {
@@ -160,7 +163,7 @@ const generateWithOpenRouter = async (
   userPrompt: string,
   maxRetries: number = 3
 ): Promise<string> => {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+  const apiKey = typeof process !== 'undefined' ? process.env.OPENROUTER_API_KEY : undefined;
   if (!apiKey) {
     throw new Error("OPENROUTER_API_KEY not configured");
   }
