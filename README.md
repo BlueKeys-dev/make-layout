@@ -20,3 +20,4 @@ WebMCP tool documentation and implementation:
 - [Layout planner](services/layout_maker.ts)
 - [WebMCP registration](services/webmcp.ts)
 - [Design editor integration](hooks/useDesignEditorWebMcp.ts)
+- repo_map.md
