@@ -25,7 +25,7 @@ export interface CanvasToolExecutionContext {
   revision: number;
   uiLocked: boolean;
   requireUiLock: boolean;
-  scale: number;
+  scale?: number;
 }
 
 export interface CanvasToolEffects {
@@ -533,7 +533,7 @@ export const executeCanvasTool = async (
       const direction = rawDirection as 'in' | 'out' | 'reset';
       const steps = input.steps === undefined ? 1 : integer(input.steps, 'steps', 1, 10);
       const STEP = 0.1;
-      const previousScale = context.scale;
+      const previousScale = context.scale ?? 1;
       let next: number;
       if (direction === 'reset') {
         next = 1;
